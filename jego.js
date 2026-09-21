@@ -2,7 +2,7 @@
 // TypeSafe (Jev) makes typed choices over an observed DOM action table;
 // an optional small OpenAI-compatible model writes field values.
 // Browser driving goes through the ego-browser SDK (taskSpace global).
-// Run: ego-browser nodejs jev-ego.js --url https://example.com --goal "..."
+// Run: ego-browser nodejs jego.js --url https://example.com --goal "..."
 //
 // Env:
 //   TYPESAFE_API_KEY      (required)  TypeSafe API key
@@ -308,7 +308,7 @@ function classifyEvalError(e) {
 
 class EgoDriver {
   async open(url) {
-    this.task = await taskSpace(env("JEV_SPACE", "jev-ego"));
+    this.task = await taskSpace(env("JEV_SPACE", "jego"));
     // Clean up pages leaked by earlier crashed runs (this space is ours alone);
     // reuse the first managed page instead of opening yet another one.
     const managed = await this.task.pages();
@@ -740,7 +740,7 @@ if (url && !/^https?:$/.test(new URL(url).protocol)) {
   process.exit(2);
 }
 if (!url || !goal) {
-  console.error('Usage: ego-browser nodejs jev-ego.js --url <url> --goal "<task>"');
+  console.error('Usage: ego-browser nodejs jego.js --url <url> --goal "<task>"');
   process.exit(2);
 }
 if (!env("TYPESAFE_API_KEY")) {

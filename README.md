@@ -1,140 +1,187 @@
-# ego-jev — jev-ultrafast 的 Ego Lite 移植版
+# Jego
 
-把 [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast)（MIT）的
-快速浏览器 agent 从「Python + browser-harness + 系统 Chrome」移植到
-「**Node 单文件 + ego-browser CLI + 你自己的 Ego Lite 浏览器**」。
+Jego lets [Jev](https://docs.typesafe.ai/introduction) drive your
+[Ego Lite](https://github.com/citrolabs/ego-lite) browser. You give it a goal in
+plain language ("find one-way flights from Zurich to London on October 20"), and
+it clicks, types, and scrolls through the site until the goal is done. It runs
+in your real browser window, with your logged-in sessions, not in a headless
+sandbox.
 
-> **非官方项目**：本项目与 CitroLabs（Ego Lite 开发方）和 browser-use 均无隶属
-> 关系，仅为兼容两者的独立移植。"Ego" 相关名称仅用于指明兼容对象。
+[中文文档](README.zh-CN.md)
 
-核心机制不变：DOM 快照 → 编号动作表 → TypeSafe (Jev) 一次请求同时选
-「操作 + 目标元素」（实测中位 0.6–1.9s/步，见 `bench/BENCHMARK.md`），
-小模型只在需要打字时生成字段文本。
+## Why it is fast
 
-## ⚠️ 数据流披露（使用前必读）
+Most browser agents send a screenshot to a vision model, wait several seconds,
+get back an action, and repeat. Jego does something cheaper:
 
-本工具运行在你的**真实登录态浏览器**里，为了让模型做决策，它会把页面数据
-发往第三方 API：
+1. A script inside the page walks the DOM and builds an **indexed action
+   space**: a numbered table of every visible control, its ARIA role, label,
+   and current value.
+2. That table goes to TypeSafe in a **single typed-choice request**. One
+   response contains both the operation (CLICK / TYPE_TEXT / SELECT / WAIT /
+   DONE) and the target element index. No screenshots, no chain-of-thought,
+   no second call.
+3. The executor re-checks the element in the page (freshness guard, geometry,
+   hit-test) and fires raw CDP input events at it.
 
-- **每一步**：页面 URL、标题、最多 6000 字可见文本、控件标签、**普通输入框的
-  当前值**（password/file/hidden 类型除外）→ 发往 `api.typesafe.ai`。
-- **需要打字时**：相同页面上下文 + 任务目标 + 最近动作 → 发往你配置的
-  `TEXT_MODEL_BASE_URL`（任意 OpenAI 兼容端点，强制 https）。
-- **终端输出**：每步的动作标签、填写的文本、最终 URL 会打印到 stdout
-  （API Key 不会出现在任何输出里）。
+Measured on this codebase, the decision step takes a median of 0.6 to 1.9
+seconds (see [bench/BENCHMARK.md](bench/BENCHMARK.md)). A click-only task like
+"open the top Hacker News comments" finishes end to end in about 2.5 seconds.
+A full Google Flights search (trip type, origin, destination, calendar date,
+submit) takes 10 steps and about 60 seconds; most of that time is page
+animation and the small helper model, not the decision step.
 
-**请勿在含敏感信息的页面上运行本工具**，除非你信任上述数据流向。
-使用者需自行遵守 TypeSafe 及所选 text-helper 服务商的条款。
+A small OpenAI-compatible model is called only when a text field needs a
+value. It writes the string, nothing else. Tested with Qwen (DashScope) and
+GLM (z.ai); Qwen3.8-flash was the fastest in our runs.
 
-## 文件
+## Data flow: read this first
 
-| 文件 | 说明 |
-|---|---|
-| `jev-ego.js` | 全部逻辑：model / driver / agent loop / CLI（snapshot.js 已内联） |
-| `snapshot.js` | 上游 DOM 快照脚本，**逐字未改**（改它后要重新内联进 jev-ego.js） |
-| `run.sh` | 启动包装：把配置/密钥以 `JEV_ENV` 头注入 stdin（ego nodejs 不继承 shell 环境） |
-| `bench.sh` / `bench/` | 多模型测评脚本与报告 |
+Jego works inside your real, logged-in browser. To make decisions it sends
+page data to third-party APIs:
 
-## 用法
+- **Every step**: page URL, title, up to 6000 characters of visible text,
+  control labels, and the current values of ordinary input fields (password,
+  file, and hidden inputs are excluded) go to `api.typesafe.ai`.
+- **When typing**: the same page context, plus your goal and recent actions,
+  goes to the `TEXT_MODEL_BASE_URL` you configured (any OpenAI-compatible
+  endpoint, https only).
+- **Terminal output**: action labels, typed text, and final URLs print to
+  stdout. API keys never appear in any output.
 
-前置：安装 [Ego Lite](https://github.com/citrolabs/ego-lite) 并让其保持运行；
-获取 TypeSafe API Key。
+Do not run Jego on pages that contain sensitive information unless you are
+comfortable with these destinations. You are responsible for the terms of
+TypeSafe and of whichever text-helper provider you choose.
+
+## Requirements
+
+- [Ego Lite](https://github.com/citrolabs/ego-lite) installed and running
+  (macOS).
+- A TypeSafe API key (`TYPESAFE_API_KEY`).
+- Optional, for text fields: a key for any OpenAI-compatible chat endpoint.
+
+No npm install, no build step. The whole agent is one file, `jego.js`.
+
+## Quick start
 
 ```bash
-git clone <this-repo> && cd ego-jev
-export TYPESAFE_API_KEY=<你的 TypeSafe key>
+git clone https://github.com/shikaizhong-design/jego && cd jego
+export TYPESAFE_API_KEY=<your TypeSafe key>
 
-# click-only 任务
+# click-only task
 JEV_URL=https://news.ycombinator.com \
 JEV_GOAL="Open the comments page of the top-ranked story" \
 ./run.sh
 
-# 需要打字的任务（再加一个 OpenAI 兼容 text helper）
-export TEXT_MODEL_API_KEY=<text helper 的 key>
-export TEXT_MODEL_BASE_URL=https://api.z.ai/api/coding/paas/v4   # GLM 实测可用
+# task with a text field (GLM shown; any OpenAI-compatible endpoint works)
+export TEXT_MODEL_API_KEY=<your text-helper key>
+export TEXT_MODEL_BASE_URL=https://api.z.ai/api/coding/paas/v4
 export TEXT_MODEL=glm-4.6 TEXT_MODEL_REASONING=omit
 JEV_URL="https://en.wikipedia.org/wiki/Main_Page" \
 JEV_GOAL="Search Wikipedia for 'Gödel, Escher, Bach' and open the article about the book" \
 ./run.sh
 ```
 
-可选环境变量：`TYPESAFE_MODEL`（默认 jev-latest）、`DEBUG=1`（打印每次 predict）、
-`JEV_KEEP=1`（结束后保留结果标签页；默认成功收尾时关闭本 space 的 agent 标签页）、
-`JEV_AUTO=1`（放行高危动作闸，见下）、`JEV_SPACE`（task space 名，默认 jev-ego）。
+`run.sh` is a thin wrapper: the ego Node runtime does not inherit your shell
+environment, so the script injects config and secrets as a `JEV_ENV` header on
+stdin. Keys never touch argv or disk.
 
-## 护栏（相对上游的增强）
+Optional variables: `TYPESAFE_MODEL` (default `jev-latest`), `DEBUG=1` (log
+every decision), `JEV_KEEP=1` (keep the result tab open), `JEV_AUTO=1`
+(disable the high-risk keyword gate), `JEV_SPACE` (task space name).
 
-这些护栏是**缓解措施，不是保证**；它们缩小风险面，但不能替代人的监督。
+## Guardrails
 
-1. **高危动作关键词闸（默认阻断）**：动作 label/value 命中支付/购买/删除/发送/
-   转账/授权/登录类关键词（中英文）时，run 直接 blocked 并打印动作详情。
-   注意：这是关键词拒绝表，措辞新颖的高危按钮可能绕过；快照不含 href，
-   链接目标地址不在检查范围内。显式 `JEV_AUTO=1` 可放行。
-2. **跨域即停**：动作后页面主机名不是起始主机或其子域 → blocked。
-   （为主机名精确比对，非完整 public-suffix 判定；起始重定向不检查。）
-3. **下载拦截（best-effort）**：启动时尝试 `Page.setDownloadBehavior deny`，
-   个别目标不支持时会静默跳过。
-4. **错误分类**：用户接管 space / safety-timeout 不再被误诊为「页面导航中」，
-   立即停且不 finish（保留现场；finish 只在正常 done/blocked 路径调用）。
-5. **select 中断即停**：下拉框 hit-test 内已改 DOM，evaluate 中断直接报错
-   停止（上游语义），不会自动重试。
-6. **URL scheme 白名单**：起始 URL 只允许 http/https。
-7. **JS dialog 检测**：observe 重试前检查并 dismiss 阻塞的 alert/confirm。
+These reduce risk. They are mitigations, not guarantees, and they do not
+replace supervision.
 
-已知残余风险：hit-test 与 CDP 点击之间存在 Node 往返的 TOCTOU 窗口（毫秒级，
-靠动作表 guard + 关键词闸缓解）；DONE 判定由同一模型自述，存在语义欺骗面
-（与上游相同）；输入走 raw CDP 而非 ego 原生 mouse/keyboard——为与上游执行
-时序保持一致而有意保留（ego 文档允许 wrapper 不可靠时用 cdp，此处理由是移植保真）。
-看到 `[ego-browser:notice] update available` 时手动跑 `ego-browser upgrade`。
+- **High-risk keyword gate (on by default)**: if an action's label or value
+  matches payment, purchase, delete, send, transfer, authorize, or login
+  terms (English and Chinese), the run stops and reports the action instead
+  of executing it. It is a denylist: a cleverly worded button can get past
+  it, and link URLs are not inspected. `JEV_AUTO=1` turns it off.
+- **Cross-domain stop**: after any action, if the page's hostname is no
+  longer the starting host or a subdomain of it, the run stops. This limits
+  phishing redirects, though it does not do a full public-suffix check.
+- **Freshness guards**: the model can only pick indices from the observed
+  action table, never raw selectors or code. Before any input fires, the
+  executor re-validates the element (connected, visible, enabled, not
+  covered) and compares a page fingerprint. A changed page invalidates the
+  decision and forces a fresh observation.
+- **Hard budgets**: 60 actions and 120 model calls per run, plus an
+  automatic stop after 3 consecutive no-op actions.
+- **User takeover**: if you take control of the task space, Jego stops
+  immediately and leaves the space alone.
+- **Other**: http/https only for the start URL, best-effort download
+  blocking, dialog detection, and fatal (never retried) handling of
+  interrupted `<select>` mutations.
 
-## 与上游的差异（有意为之）
+Known residual risks: a millisecond-scale TOCTOU window between hit-test and
+CDP input, and a DONE judgment that comes from the same model that acts, so a
+manipulative page can try to talk it into declaring success. Both are
+inherited from the upstream design.
 
-1. **驱动层**：browser-harness/CDP → ego SDK（`taskSpace` / `page.evaluate` /
-   `page.cdp("Input.*")`）。点击/打字仍是 CDP 原始输入 + JS hit-test，执行序列
-   与上游对应。
-2. **去掉** `Emulation.setDeviceMetricsOverride`（1120×780）和
-   `Emulation.setFocusEmulationEnabled`：Ego 标签页是前台真实标签页，视口即窗口大小。
-   窗口过窄时视口内可交互元素会变少，可能多几步 scroll。
-3. **去掉截图录制**（record_dir/screenshots）：上游只用于 demo 回放，执行链路不依赖。
-4. **配置注入**：ego nodejs runtime 不继承 shell 环境变量，密钥经 run.sh 从 stdin
-   注入（不进 argv、不由本脚本落盘）。
-5. `TEXT_MODEL_REASONING=omit`：新增选项，发送完全不带 reasoning 字段的请求体
-   （GLM 等非 DeepSeek/OpenAI 端点需要）。
-6. **清理**：正常收尾时 `task.finish({ keep })` 关掉自己 space 的 agent 标签页；
-   启动时清理上次崩溃残留的标签页；异常/用户接管路径不动 space。
+## How it works
 
-## 自测结果（复审修复后复测）
+```
+page ──> snapshot.js ──> indexed action table ──> TypeSafe (1 request)
+                                                      │ operation + target
+                          freshness guard, hit-test <─┘
+                                      │
+                            CDP input (click / type)
+                                      │
+                              observe, repeat
+```
 
-| 场景 | 结果 | 耗时 | 说明 |
-|---|---|---|---|
-| HN 打开头条评论区 | ✅ done | 2.4s | 1 步 CLICK，conf 0.99 |
-| Wikipedia 搜索 GEB 并打开条目 | ✅ done | 6.7s | TYPE_TEXT + CLICK；GLM 文本 2.8s |
-| Google Flights 苏黎世→伦敦单程 | ✅ done（未来日期） | 60.7s | 10 步全流程：票型→Zurich→London→2026-10-20→Search→结果页。**注意**：目标日期必须是未来日期——过期日期不可订，模型会选最近可订日期并与 DONE 条件冲突，空转至预算上限停机（fail-safe，不会乱点） |
+- `snapshot.js` is taken verbatim from upstream. It assigns stable IDs to
+  real DOM nodes via a `WeakMap`, collects visible controls and page text,
+  and produces a page marker used for staleness checks.
+- `jego.js` ports the upstream model layer (typed-choice validation,
+  probability checks), the executor (geometry + hit-test + `Input.*` CDP
+  events), and the agent loop (single-use decisions, history-before-observe,
+  pending-text cache, no-progress stop).
+- The browser driver is the documented ego SDK: `taskSpace`,
+  `page.evaluate`, and `page.cdp` for raw input. Input stays on raw CDP to
+  keep the upstream execution timing; the ego docs allow the CDP escape
+  hatch for exactly this case.
 
-Ego 适配中新增的两处 settle 逻辑（上游没有的）：
-1. 点击后观察上限 50ms → **300ms**（前台标签页的菜单关闭动画更慢，
-   50ms 时观察到的仍是开着的菜单，Jev 会误判 BLOCKED）。
-2. 点击后若动作表 ≤5 项（判定为遮罩/动画中间态），**等 400ms 重新观察一次**
-   再让模型决策。
+Two settle tweaks were added for a foreground browser: a 300 ms observation
+cap after clicks (menu close animations are slower than in the upstream
+background-tab setup), and one re-observation when a click leaves fewer than
+six actions on the table (a sign of a mid-animation overlay).
 
-已知边界（与上游一致）：不支持文件上传、canvas、iframe、复杂键盘组件；
-日期选择器这类复合 widget 是上游也最脆弱的部分，在 Ego 前台视口下
-重渲染更频繁，stale 率更高。
+## Limits
 
-## 安全模型（继承上游）
+Same boundaries as upstream: web pages with a DOM only. No file uploads,
+canvas, iframes, shadow DOM, or complex keyboard widgets. Date pickers and
+other composite widgets are the most fragile part. Date goals must be in the
+future: an unbookable date makes the agent spin until the step budget stops
+it (fail-safe, it does not click randomly).
 
-- 页面文本只作为「不可信数据」进 prompt，rules 明确禁止当指令执行。
-- 模型只能返回「编号动作表里的下标」，不能生成选择器/代码；执行前 JS 重新
-  hit-test + guard 比对（元素身份、disabled、可见性、覆盖检测），页面变化
-  会触发 StalePage 重观察，决策随旧页面一起作废。
-- DONE/BLOCKED 前强制 fresh() 校验；连续 3 步页面无变化自动 blocked；
-  60 步 / 120 次模型调用双预算硬上限。
+## Benchmarks
 
-## 许可与归属
+[bench/BENCHMARK.md](bench/BENCHMARK.md) has the full matrix: 4 text-helper
+models (GLM-4.6, GLM-4.5-air, Qwen3.8-Max, Qwen3.8-Flash) x 3 task types,
+with per-step decision latency, text-helper latency, and success rates.
+Reproduce with `bench.sh` (env vars: `ZAI_API_KEY`, `DASHSCOPE_API_KEY`,
+`TYPESAFE_API_KEY`). Small samples, one machine, your numbers will differ.
 
-MIT（见 `LICENSE`）。本项目是
-[browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast) 的移植，
-`snapshot.js` 逐字来自上游，上游完整 MIT 许可文本已附在 `LICENSE` 的
-THIRD-PARTY NOTICES 一节。Ego Lite 为
-[CitroLabs 的 MIT 项目](https://github.com/citrolabs/ego-lite)，本项目仅通过
-其公开 CLI 调用，不包含其代码。TypeSafe (Jev) 为托管服务，需自备账号与 Key。
+## Related projects
+
+- [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast):
+  the upstream Python agent this is a port of.
+- [romaluev/jev-ego](https://github.com/romaluev/jev-ego): an independent
+  TypeScript port of the same upstream, built as a daemon with an HTTP API
+  and a test suite. Jego is a single dependency-free file with a multi-model
+  benchmark and extra guardrails. Different tradeoffs, same idea.
+
+## License and attribution
+
+MIT, see [LICENSE](LICENSE). Jego is a port of
+[browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast)
+(MIT, copyright Browser Use); `snapshot.js` is copied verbatim and the
+upstream license text is reproduced in the THIRD-PARTY NOTICES section.
+Ego Lite is an MIT project by CitroLabs; Jego only calls its public CLI and
+contains none of its code. Jego is an unofficial project, not affiliated
+with CitroLabs or browser-use, and "Ego" is referenced only to indicate
+compatibility. TypeSafe (Jev) is a hosted service; bring your own key.

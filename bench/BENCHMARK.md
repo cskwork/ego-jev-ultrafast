@@ -1,4 +1,4 @@
-# ego-jev 测评报告（开源前验证）
+# Jego 测评报告（开源前验证）
 
 测试日期：2026-09-21 · 环境：Ego Lite 0.5.0.32（前台真实标签页，带登录态）· Jev：TYPESAFE_MODEL=jev-latest
 

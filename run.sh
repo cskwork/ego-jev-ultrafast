@@ -17,4 +17,4 @@ keys = ["JEV_URL","JEV_GOAL","TYPESAFE_API_KEY","TYPESAFE_MODEL",
 print("globalThis.JEV_ENV = " + json.dumps({k: os.environ[k] for k in keys if k in os.environ}) + ";")
 ')
 
-{ printf "%s\n" "$header"; cat jev-ego.js; } | ego-browser nodejs
+{ printf "%s\n" "$header"; cat jego.js; } | ego-browser nodejs

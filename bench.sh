@@ -1,5 +1,5 @@
 #!/bin/bash
-# ego-jev benchmark harness. Loops text-helper models x tasks x runs.
+# Jego benchmark harness. Loops text-helper models x tasks x runs.
 # Keys come from env vars only; nothing secret is written to disk.
 # Usage: ZAI_API_KEY=... DASHSCOPE_API_KEY=... TYPESAFE_API_KEY=... ./bench.sh [runs_per_task]
 set -uo pipefail
