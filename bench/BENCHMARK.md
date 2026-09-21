@@ -1,6 +1,10 @@
 # ego-jev 测评报告（开源前验证）
 
-测试日期：2026-09-21 · 环境：Ego Lite 0.5.0.32（前台真实标签页，带登录态）· Jev：TYPESAFE_MODEL=jev-latest · 原始日志：`bench/results/*.log`
+测试日期：2026-09-21 · 环境：Ego Lite 0.5.0.32（前台真实标签页，带登录态）· Jev：TYPESAFE_MODEL=jev-latest
+
+> 原始日志含测试页面文本，未随仓库发布；所有数值可用 `bench.sh` 复现
+> （`ZAI_API_KEY` / `DASHSCOPE_API_KEY` / `TYPESAFE_API_KEY` 环境变量）。
+> 每任务仅 2 轮小样本，数值只代表本次环境，不构成性能承诺。
 
 ## 方法
 
@@ -25,14 +29,16 @@ qwen3.8-max 唯一 1 次失败是 TypeSafe API 网络抖动（`Model connection 
 1. **速度核心主张成立**：Jev 决策每步中位数 0.6–1.9s，一步一请求（操作+目标同时出）。
    click-only 任务端到端 2.7s。瓶颈不在 Jev，而在 text-helper（2.1–9s/次）
    和 Ego 前台标签页的页面动态（stale 重观察）。
-2. **text-helper 推荐 qwen3.8-flash**：最快（中位 ~2.9s）且 4/4 稳定；
-   glm-4.6 最慢（~6.9s）。代码对四家端点（z.ai / DashScope）均开箱兼容。
+2. **text-helper 本次小样本中 qwen3.8-flash 最快**（中位 ~2.9s，4/4 稳定）；
+   glm-4.6 最慢（~6.9s）。代码对两个端点家族（z.ai / DashScope，共 4 个模型）
+   均开箱兼容。
 3. **真实复杂流程可走通**：Google Flights 10 步全流程 done（含 autocomplete、
-   日历、搜索提交），60.7s——比原版 7s 慢，差异来自 text-helper 延迟、
-   Ego SDK 往返和为前台菜单动画加的 settle 等待，换来的是「跑在你自己的
-   浏览器、带你的登录态」。
-4. **护栏按设计触发**：过期日期目标会空转→预算硬上限停机；高危词动作
-   fail-closed；跨域即停。全部有日志佐证。
+   日历、搜索提交），60.7s。上游演示过 7.1s 的同站搜索（不同环境、不同
+   text-helper、后台标签页，非 A/B 对照，不宜直接比较）。本移植更慢的
+   原因推测为 text-helper 延迟、ego SDK 往返和 settle 等待（未做对照实验）；
+   换来的是「跑在你自己的浏览器、带你的登录态」。
+4. **护栏在本次测试中按设计触发**：过期日期目标空转→预算硬上限停机（有日志）。
+   高危词闸与跨域闸为代码审查确认，未做针对性攻击测试。
 
 ## 已知限制（须写进开源 README）
 

@@ -2,6 +2,11 @@ MIT License
 
 Copyright (c) 2026 ego-jev contributors
 
+This project is a port of jev-ultrafast
+(https://github.com/browser-use/jev-ultrafast), also MIT licensed,
+copyright (c) 2026 browser-use contributors. The DOM snapshot script
+(snapshot.js, inlined in jev-ego.js) is taken verbatim from that project.
+
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -24,10 +29,9 @@ SOFTWARE.
 THIRD-PARTY NOTICES
 ============================================================
 
-ego-jev is a port of jev-ultrafast
-(https://github.com/browser-use/jev-ultrafast). The DOM snapshot script
-(snapshot.js, also inlined inside jev-ego.js) is copied verbatim from that
-project. Its original license text follows verbatim:
+This project is a port of jev-ultrafast, and contains snapshot.js
+copied verbatim from that project (also inlined inside jev-ego.js).
+The original license text follows verbatim:
 
 ------------------------------------------------------------
 MIT License

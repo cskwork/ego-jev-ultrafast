@@ -246,6 +246,8 @@ async function fieldText(context) {
   if (!key)
     throw new Error("TYPE_TEXT needs TEXT_MODEL_API_KEY; no text is hardcoded or guessed by the executor.");
   const base = env("TEXT_MODEL_BASE_URL", "https://api.deepseek.com/v1").replace(/\/+$/, "");
+  if (!base.startsWith("https://"))
+    throw new Error("TEXT_MODEL_BASE_URL must be https; refusing to send the API key in cleartext.");
   const model = env("TEXT_MODEL", "deepseek-chat");
   let reasoning = base.includes("api.deepseek.com/")
     ? { thinking: { type: "disabled" } }
@@ -505,7 +507,8 @@ const RISKY =
 const RISKY_EXACT = /^(book|buy|pay|send|delete|place order|confirm|subscribe|transfer)[.!]?$/i;
 
 function riskyAction(action) {
-  const hay = [action.label, action.href, action.value].filter(Boolean).join(" ");
+  // Note: snapshot actions intentionally carry no href; only label/value are checked.
+  const hay = [action.label, action.value].filter(Boolean).join(" ");
   return RISKY.test(hay) || RISKY_EXACT.test(String(action.label || "").trim());
 }
 
@@ -524,7 +527,7 @@ class Agent {
       await agent.browser.close();
       throw e;
     }
-    agent.startHost = new URL(url).hostname.split(".").slice(-2).join(".");
+    agent.startHost = new URL(url).hostname;
     agent.state = {
       goal: task,
       page,
@@ -678,12 +681,14 @@ class Agent {
     // outside the observed trust boundary.
     const host = (() => {
       try {
-        return new URL(state.page.url).hostname.split(".").slice(-2).join(".");
+        return new URL(state.page.url).hostname;
       } catch {
         return "";
       }
     })();
-    if (host && this.startHost && host !== this.startHost) {
+    // Exact host or a subdomain of it is fine; anything else is outside the
+    // trust boundary. (A full public-suffix check would be stricter still.)
+    if (host && this.startHost && host !== this.startHost && !host.endsWith("." + this.startHost)) {
       state.status = "blocked";
       state.block_reason = `Cross-domain navigation to ${host} stopped the run.`;
     }
@@ -709,8 +714,8 @@ class Agent {
     return this.state;
   }
 
-  async close() {
-    await this.browser.close();
+  async close(keep = false, ok = true) {
+    await this.browser.close(keep, ok);
   }
 }
 

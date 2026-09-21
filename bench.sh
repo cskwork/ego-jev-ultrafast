@@ -1,9 +1,9 @@
 #!/bin/bash
 # ego-jev benchmark harness. Loops text-helper models x tasks x runs.
-# Keys are read at runtime from local pi config; nothing secret is written to disk.
-# Usage: ./bench.sh [runs_per_task]   (default 2)
+# Keys come from env vars only; nothing secret is written to disk.
+# Usage: ZAI_API_KEY=... DASHSCOPE_API_KEY=... TYPESAFE_API_KEY=... ./bench.sh [runs_per_task]
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 RUNS=${1:-2}
 OUT=bench/results
 mkdir -p "$OUT"
@@ -20,7 +20,11 @@ MODELS=(
 )
 
 # task_id|url|goal  (same-domain tasks only; cross-domain guard blocks result-opening)
+# The flights date must always be in the FUTURE (past dates are unbookable and
+# make the agent spin until the step budget stops it); compute it dynamically.
+FLIGHTS_DATE=$(python3 -c "import datetime;print((datetime.date.today()+datetime.timedelta(days=30)).strftime('%B %-d, %Y'))")
 TASKS=(
+  "flights|https://www.google.com/travel/flights?hl=en|Find one-way flights from Zurich to London on $FLIGHTS_DATE, for one adult in economy. Stop when matching flight options are visible. Do not select or book a flight."
   "hn|https://news.ycombinator.com|Open the comments page of the top-ranked story"
   "wiki|https://en.wikipedia.org/wiki/Main_Page|Search Wikipedia for 'Gödel, Escher, Bach' and open the article about the book"
   "wiki2|https://en.wikipedia.org/wiki/Main_Page|Search Wikipedia for 'Marie Curie' and open the article about the scientist"
@@ -34,7 +38,7 @@ for m in "${MODELS[@]}"; do
     IFS='|' read -r tid url goal <<< "$t"
     # hn is click-only; the text model is never called, so one run under glm-4.6 suffices
     [ "$tid" = "hn" ] && [ "$model" != "glm-4.6" ] && continue
-    n=$RUNS; [ "$tid" = "hn" ] && n=1
+    n=$RUNS; { [ "$tid" = "hn" ] || [ "$tid" = "flights" ]; } && n=1
     for r in $(seq 1 $n); do
       log="$OUT/${model}__${tid}__r${r}.log"
       echo ">>> $model $tid run$r $(date +%H:%M:%S)"
