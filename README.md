@@ -1,7 +1,10 @@
-# Jego
+# Jego — run Jev ultrafast on Ego Lite
 
-Jego lets [Jev](https://docs.typesafe.ai/introduction) drive your
-[Ego Lite](https://github.com/citrolabs/ego-lite) browser. You give it a goal in
+**ego-jev-ultrafast**: [Jev](https://docs.typesafe.ai/introduction) drives your
+[Ego Lite](https://github.com/citrolabs/ego-lite) browser. A single-file,
+zero-dependency port of
+[browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast) with
+multi-model benchmarks and extra guardrails. You give it a goal in
 plain language ("find one-way flights from Zurich to London on October 20"), and
 it clicks, types, and scrolls through the site until the goal is done. It runs
 in your real browser window, with your logged-in sessions, not in a headless
