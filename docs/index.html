@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jego - Jev ultrafast on Ego Lite</title>
+<meta name="description" content="Jego drives the Ego Lite browser from a plain-language goal. Single file, zero dependencies.">
+<style>
+:root{--bg1:#0f172a;--bg2:#1e1b4b;--card:rgba(15,23,42,.62);--line:rgba(255,255,255,.14);--tx:#e8ecf5;--mut:#aab4cc;--ac:#7dd3fc;--ac2:#c4b5fd;--warn:#fbbf24}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font:16px/1.7 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR","Segoe UI",sans-serif;color:var(--tx);background:linear-gradient(135deg,var(--bg1),var(--bg2)) fixed;min-height:100vh}
+body::before{content:"";position:fixed;inset:0;z-index:-1;background:radial-gradient(600px 400px at 15% 10%,rgba(125,211,252,.18),transparent),radial-gradient(700px 500px at 85% 70%,rgba(196,181,253,.16),transparent)}
+a{color:var(--ac)}
+.wrap{max-width:960px;margin:0 auto;padding:0 20px 60px}
+nav{position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 20px;background:rgba(15,23,42,.8);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav .links{display:flex;gap:14px;flex-wrap:wrap;font-size:14px}
+nav a{text-decoration:none;color:var(--mut)}nav a:hover{color:var(--tx)}
+.sw{display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.sw button{background:transparent;color:var(--mut);border:0;padding:5px 14px;font:inherit;font-size:13px;cursor:pointer}
+.sw button[aria-pressed=true]{background:var(--ac);color:#0b1020;font-weight:700}
+header{padding:70px 0 30px;text-align:center}
+h1{font-size:clamp(34px,7vw,60px);margin:0 0 8px;background:linear-gradient(90deg,var(--ac),var(--ac2));-webkit-background-clip:text;background-clip:text;color:transparent}
+header p.lead{font-size:clamp(17px,2.4vw,21px);color:var(--mut);max-width:680px;margin:12px auto}
+.badge{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:3px 12px;font-size:13px;color:var(--mut);margin:4px}
+.btn{display:inline-block;margin:16px 6px 0;padding:10px 22px;border-radius:12px;text-decoration:none;font-weight:600;border:1px solid var(--line);color:var(--tx);background:var(--card)}
+.btn.p{background:var(--ac);color:#0b1020;border-color:var(--ac)}
+section{margin-top:44px}
+h2{font-size:26px;margin:0 0 14px}
+.card{background:var(--card);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:16px;padding:20px 22px;margin:12px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.grid .card{margin:0}
+h3{margin:0 0 6px;font-size:18px}
+.card p{margin:6px 0;color:var(--mut)}
+pre{background:rgba(2,6,23,.8);border:1px solid var(--line);border-radius:12px;padding:14px 16px;overflow:auto;font:13.5px/1.55 ui-monospace,Menlo,Consolas,monospace;color:#d6e2ff}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em;background:rgba(255,255,255,.08);padding:1px 6px;border-radius:6px}
+pre code{background:none;padding:0}
+table{width:100%;border-collapse:collapse;font-size:14.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--ac)}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:center}
+.flow span.n{background:rgba(125,211,252,.12);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:14px}
+.flow span.a{color:var(--ac2)}
+.warn{border-color:rgba(251,191,36,.5)}
+.warn h2,.warn h3{color:var(--warn)}
+ul{padding-left:20px;margin:6px 0}li{margin:4px 0}
+footer{margin-top:50px;text-align:center;color:var(--mut);font-size:14px}
+.num{font-size:30px;font-weight:700;color:var(--ac)}
+</style>
+</head>
+<body>
+<nav>
+  <div class="links">
+    <a href="#why" data-i18n="nav_why"></a><a href="#how" data-i18n="nav_how"></a><a href="#guide" data-i18n="nav_guide"></a><a href="#new" data-i18n="nav_new"></a><a href="#safety" data-i18n="nav_safety"></a>
+  </div>
+  <div class="sw" role="group" aria-label="Language"><button id="b-ko" aria-pressed="true">KO</button><button id="b-en" aria-pressed="false">EN</button></div>
+</nav>
+<div class="wrap">
+<header>
+  <h1>Jego</h1>
+  <p class="lead" data-i18n="hero"></p>
+  <span class="badge" data-i18n="badge1"></span><span class="badge" data-i18n="badge2"></span><span class="badge" data-i18n="badge3"></span>
+  <div><a class="btn p" href="https://github.com/cskwork/ego-jev-ultrafast" data-i18n="cta_gh"></a><a class="btn" href="#guide" data-i18n="cta_start"></a></div>
+</header>
+
+<section id="what">
+  <h2 data-i18n="what_h"></h2>
+  <div class="card"><p data-i18n="what_p1"></p><p data-i18n="what_p2"></p></div>
+</section>
+
+<section id="why">
+  <h2 data-i18n="why_h"></h2>
+  <div class="grid">
+    <div class="card"><h3 data-i18n="why1_h"></h3><p data-i18n="why1_p"></p></div>
+    <div class="card"><h3 data-i18n="why2_h"></h3><p data-i18n="why2_p"></p></div>
+    <div class="card"><h3 data-i18n="why3_h"></h3><p data-i18n="why3_p"></p></div>
+  </div>
+  <div class="card"><div class="num">0.6 - 1.9 s</div><p data-i18n="why_bench"></p></div>
+</section>
+
+<section id="how">
+  <h2 data-i18n="how_h"></h2>
+  <div class="card">
+    <div class="flow">
+      <span class="n">page</span><span class="a">&rarr;</span><span class="n">snapshot.js</span><span class="a">&rarr;</span><span class="n" data-i18n="f_table"></span><span class="a">&rarr;</span><span class="n">TypeSafe</span><span class="a">&rarr;</span><span class="n" data-i18n="f_guard"></span><span class="a">&rarr;</span><span class="n">CDP input</span><span class="a">&rarr;</span><span class="n" data-i18n="f_obs"></span>
+    </div>
+    <p data-i18n="how_p"></p>
+  </div>
+</section>
+
+<section id="guide">
+  <h2 data-i18n="guide_h"></h2>
+  <div class="card"><h3 data-i18n="req_h"></h3>
+    <ul><li data-i18n="req1"></li><li data-i18n="req2"></li><li data-i18n="req3"></li></ul>
+    <p data-i18n="req_note"></p></div>
+
+  <div class="card"><h3 data-i18n="qs_h"></h3>
+<pre><code>git clone https://github.com/cskwork/ego-jev-ultrafast &amp;&amp; cd ego-jev-ultrafast
+export TYPESAFE_API_KEY=&lt;your TypeSafe key&gt;
+
+# click-only task
+JEV_URL=https://news.ycombinator.com \
+JEV_GOAL="Open the comments page of the top-ranked story" \
+./run.sh</code></pre>
+    <p data-i18n="qs_p"></p></div>
+
+  <div class="card"><h3 data-i18n="kc_h"></h3>
+<pre><code>security add-generic-password -a "$USER" -s jego-typesafe -w     # prompts
+security add-generic-password -a "$USER" -s jego-text-model -w   # optional
+cp jego.local.env.example jego.local.env   # non-secret settings
+JEV_URL=... JEV_GOAL=... ./run-keychain.sh</code></pre>
+    <p data-i18n="kc_p"></p></div>
+
+  <div class="card"><h3 data-i18n="tx_h"></h3>
+    <p data-i18n="tx_p"></p>
+    <h3>A. OpenAI-compatible endpoint</h3>
+<pre><code>export TEXT_MODEL_API_KEY=&lt;your text-helper key&gt;
+export TEXT_MODEL_BASE_URL=https://api.z.ai/api/coding/paas/v4
+export TEXT_MODEL=glm-4.6 TEXT_MODEL_REASONING=omit
+JEV_URL="https://en.wikipedia.org/wiki/Main_Page" \
+JEV_GOAL="Search Wikipedia for 'Gödel, Escher, Bach' and open the article about the book" \
+./run.sh</code></pre>
+    <h3>B. Codex CLI</h3>
+<pre><code># jego.local.env
+TEXT_MODEL_PROVIDER=codex
+TEXT_MODEL=gpt-6-luna
+TEXT_MODEL_REASONING=low
+CODEX_BIN=/absolute/path/to/codex</code></pre>
+    <p data-i18n="tx_codex"></p></div>
+
+  <div class="card"><h3 data-i18n="opt_h"></h3>
+    <table>
+      <tr><th data-i18n="th_var"></th><th data-i18n="th_desc"></th></tr>
+      <tr><td><code>TYPESAFE_MODEL</code></td><td data-i18n="o1"></td></tr>
+      <tr><td><code>DEBUG=1</code></td><td data-i18n="o2"></td></tr>
+      <tr><td><code>JEV_KEEP=1</code></td><td data-i18n="o3"></td></tr>
+      <tr><td><code>JEV_AUTO=1</code></td><td data-i18n="o4"></td></tr>
+      <tr><td><code>JEV_SPACE</code></td><td data-i18n="o5"></td></tr>
+      <tr><td><code>JEV_FOLLOW_POPUPS=1</code></td><td data-i18n="o6"></td></tr>
+    </table></div>
+</section>
+
+<section id="new">
+  <h2 data-i18n="new_h"></h2>
+  <div class="grid">
+    <div class="card"><h3 data-i18n="n1_h"></h3><p data-i18n="n1_p"></p></div>
+    <div class="card"><h3 data-i18n="n2_h"></h3><p data-i18n="n2_p"></p></div>
+    <div class="card"><h3 data-i18n="n3_h"></h3><p data-i18n="n3_p"></p></div>
+    <div class="card"><h3 data-i18n="n4_h"></h3><p data-i18n="n4_p"></p></div>
+    <div class="card"><h3 data-i18n="n5_h"></h3><p data-i18n="n5_p"></p></div>
+  </div>
+</section>
+
+<section id="safety">
+  <h2 data-i18n="safe_h"></h2>
+  <div class="card warn"><h3 data-i18n="df_h"></h3><p data-i18n="df_p"></p>
+    <ul><li data-i18n="df1"></li><li data-i18n="df2"></li><li data-i18n="df3"></li></ul></div>
+  <div class="card"><h3 data-i18n="gr_h"></h3>
+    <ul><li data-i18n="g1"></li><li data-i18n="g2"></li><li data-i18n="g3"></li><li data-i18n="g4"></li><li data-i18n="g5"></li></ul>
+    <p data-i18n="gr_note"></p></div>
+  <div class="card"><h3 data-i18n="lim_h"></h3><p data-i18n="lim_p"></p></div>
+</section>
+
+<footer>
+  <p data-i18n="credit"></p>
+  <p><a href="https://github.com/cskwork/ego-jev-ultrafast">GitHub</a> &middot; <a href="https://github.com/browser-use/jev-ultrafast">browser-use/jev-ultrafast</a> &middot; <a href="https://github.com/citrolabs/ego-lite">Ego Lite</a></p>
+</footer>
+</div>
+
+<script>
+const T={
+ko:{
+nav_why:"속도",nav_how:"동작 원리",nav_guide:"가이드",nav_new:"개선 사항",nav_safety:"안전·한계",
+hero:"목표를 평범한 말로 적으면, Jego가 Ego Lite 브라우저를 직접 조작해 끝까지 수행합니다. 한 단계에 요청 한 번.",
+badge1:"단일 파일 · 의존성 0",badge2:"MIT 라이선스",badge3:"비공식 프로젝트",
+cta_gh:"GitHub에서 보기",cta_start:"빠른 시작",
+what_h:"Jego란?",
+what_p1:"Jego는 Ego Lite 브라우저를 구동하는 에이전트입니다. \"2번째로 인기 있는 글의 댓글 페이지를 열어줘\" 같은 목표를 주면 클릭, 입력, 스크롤을 반복해 목표를 달성합니다.",
+what_p2:"browser-use/jev-ultrafast를 단일 파일(jego.js), 의존성 없이 옮긴 포트입니다. 한 단계마다 TypeSafe에 타입 선택(typed-choice) 요청 한 번만 보내고, 헤드리스 샌드박스가 아니라 로그인 상태가 유지된 내 실제 브라우저 창에서 동작합니다.",
+why_h:"왜 빠른가",
+why1_h:"인덱스 액션 테이블",why1_p:"페이지 안의 스크립트가 DOM을 훑어 보이는 모든 컨트롤을 번호, ARIA 역할, 라벨, 현재 값으로 정리한 표를 만듭니다.",
+why2_h:"스크린샷 없음",why2_p:"비전 모델에 이미지를 보내고 기다리지 않습니다. 표만 보내고, 추론 과정 없이 한 번의 응답으로 동작(CLICK / TYPE_TEXT / SELECT / WAIT / DONE)과 대상 번호를 함께 받습니다.",
+why3_h:"요청 한 번",why3_p:"두 번째 호출이 없습니다. 텍스트 입력칸이 있을 때만 작은 도우미 모델이 문자열 하나를 만듭니다.",
+why_bench:"벤치마크(bench/BENCHMARK.md)에서 단계별 결정 지연의 중앙값은 0.6~1.9초였습니다. 클릭만 필요한 Hacker News 댓글 열기는 처음부터 끝까지 약 2.7초, 10단계 복합 검색은 약 60초였고 대부분 페이지 애니메이션과 도우미 모델 시간입니다. 작은 표본(작업당 2회)이므로 성능 보증이 아니며 환경마다 다릅니다.",
+how_h:"동작 원리",
+f_table:"액션 테이블",f_guard:"신선도 검사 · 히트 테스트",f_obs:"관찰, 반복",
+how_p:"모델은 관찰된 표의 번호만 고를 수 있고 임의 셀렉터나 코드는 실행할 수 없습니다. 입력 직전에 요소가 연결·표시·활성 상태이고 가려지지 않았는지, 페이지 지문이 그대로인지 다시 확인하며, 달라졌다면 결정을 버리고 다시 관찰합니다.",
+guide_h:"가이드",
+req_h:"요구 사항",
+req1:"Ego Lite 설치 및 실행 (macOS)",
+req2:"TypeSafe API 키 (TYPESAFE_API_KEY)",
+req3:"텍스트 입력칸용(선택): OpenAI 호환 채팅 엔드포인트 키 또는 로그인된 Codex CLI(키 불필요)",
+req_note:"npm install도 빌드도 없습니다. 에이전트 전체가 jego.js 한 파일입니다.",
+qs_h:"빠른 시작",
+qs_p:"run.sh는 얇은 래퍼입니다. ego Node 런타임은 셸 환경 변수를 물려받지 않으므로, 설정과 키를 stdin 헤더(JEV_ENV)로 주입합니다. 키는 argv나 디스크에 남지 않습니다.",
+kc_h:"macOS 키체인으로 키 관리",
+kc_p:"run-keychain.sh가 로그인 키체인에서 키를 읽어 run.sh를 호출하므로, 키가 셸 기록이나 dotfile에 남지 않습니다. 비밀이 아닌 설정은 jego.local.env(git 무시 대상)에 둡니다.",
+tx_h:"텍스트 입력칸 처리",
+tx_p:"입력칸에 값을 써야 할 때만 도우미 모델이 호출됩니다. 두 가지 방법 중 하나를 고르세요.",
+tx_codex:"TEXT_MODEL_PROVIDER=codex 와 CODEX_BIN(절대 경로)을 지정합니다. ego 런타임은 셸 PATH를 보지 못합니다. 입력칸마다 codex exec를 실행하며 기본 모델은 gpt-6-luna, 추론 강도는 low입니다. 입력칸당 약 5초이며 직접 API 호출은 약 1초입니다.",
+opt_h:"옵션",th_var:"변수",th_desc:"설명",
+o1:"TypeSafe 모델 (기본값 jev-latest)",o2:"모든 결정을 로그로 출력",o3:"결과 탭을 닫지 않고 유지",o4:"고위험 키워드 차단을 해제 (주의)",o5:"작업 공간(task space) 이름",o6:"클릭 후 페이지가 window.open으로 연 탭으로 전환. 클릭당 최대 0.75초가 늘어 기본값은 꺼짐",
+new_h:"최근 개선",
+n1_h:"내부 스크롤 영역",n1_p:"창 자체가 스크롤되지 않는 앱 셸에서는 가장 큰 내부 스크롤 영역을 스크롤 대상으로 제공합니다.",
+n2_h:"팝업 따라가기",n2_p:"JEV_FOLLOW_POPUPS=1이면 클릭으로 열린 새 탭으로 전환합니다.",
+n3_h:"BLOCKED 재시도",n3_p:"컨트롤이 아직 렌더링되지 않은 페이지(앱 부팅, 뷰어 로딩)에서 BLOCKED가 나오면 잠시 기다린 뒤 최대 5번 다시 시도합니다.",
+n4_h:"한국어 고위험 키워드",n4_p:"고위험 키워드 차단이 영어, 중국어에 더해 한국어 결제·구매·삭제·전송 등도 감지합니다.",
+n5_h:"URL 토큰 마스킹",n5_p:"토큰이나 세션 ID처럼 보이는 쿼리 파라미터는 출력되는 URL에서 가려집니다.",
+safe_h:"안전과 한계",
+df_h:"데이터 흐름: 먼저 읽으세요",
+df_p:"Jego는 로그인된 실제 브라우저에서 동작하며, 판단을 위해 페이지 데이터를 외부 API로 보냅니다.",
+df1:"매 단계: 페이지 URL, 제목, 보이는 텍스트(최대 6000자), 컨트롤 라벨, 일반 입력칸의 현재 값(비밀번호·파일·숨김 입력 제외)이 api.typesafe.ai로 전송됩니다.",
+df2:"텍스트 입력 시: 같은 페이지 정보와 목표, 최근 행동이 설정한 TEXT_MODEL_BASE_URL(OpenAI 호환, https만) 또는 TEXT_MODEL_PROVIDER=codex일 때 로컬 codex CLI를 통해 OpenAI로 전달됩니다.",
+df3:"터미널 출력: 행동 라벨, 입력한 텍스트, 최종 URL이 출력됩니다. API 키는 출력되지 않습니다.",
+gr_h:"가드레일",
+g1:"고위험 키워드 차단(기본 켜짐): 결제, 구매, 삭제, 전송, 이체, 승인, 로그인 관련 라벨이면 실행하지 않고 멈춰서 보고합니다. 금칙어 방식이라 우회될 수 있고 링크 URL은 검사하지 않습니다.",
+g2:"도메인 이탈 중단: 시작 호스트(또는 그 하위 도메인)를 벗어나면 멈춥니다.",
+g3:"신선도 검사: 모델은 관찰된 번호만 선택하고, 입력 전에 요소를 재검증합니다.",
+g4:"하드 예산: 실행당 행동 60회, 모델 호출 120회, 변화 없는 행동이 3번 연속이면 자동 중단.",
+g5:"사용자 인계: 작업 공간을 직접 가져가면 즉시 멈춥니다.",
+gr_note:"이는 위험을 줄이는 완화책일 뿐 보증이 아니며 감독을 대체하지 않습니다. 민감한 정보가 있는 페이지에서는 위 전송 대상을 감수할 수 있을 때만 사용하세요. TypeSafe와 도우미 모델 제공자의 약관은 사용자가 책임집니다.",
+lim_h:"한계",
+lim_p:"DOM이 있는 웹 페이지만 지원합니다. 파일 업로드, canvas, iframe, shadow DOM, 복잡한 키보드 위젯은 지원하지 않습니다. 날짜 선택기 같은 복합 위젯이 가장 취약하며, 예약할 수 없는 날짜를 목표로 주면 예산이 소진되어 멈출 때까지 헛돕니다(임의 클릭은 하지 않음).",
+credit:"MIT 라이선스. browser-use/jev-ultrafast(MIT)의 포트이며 Ego Lite는 CitroLabs의 MIT 프로젝트입니다. Jego는 CitroLabs 및 browser-use와 무관한 비공식 프로젝트이며 \"Ego\"는 호환성 표시를 위해서만 언급됩니다. TypeSafe(Jev)는 호스팅 서비스이며 본인의 키가 필요합니다."
+},
+en:{
+nav_why:"Speed",nav_how:"How it works",nav_guide:"Guide",nav_new:"Improvements",nav_safety:"Safety & limits",
+hero:"Describe a goal in plain language and Jego drives your Ego Lite browser until it is done. One request per step.",
+badge1:"Single file, zero dependencies",badge2:"MIT license",badge3:"Unofficial project",
+cta_gh:"View on GitHub",cta_start:"Quick start",
+what_h:"What is Jego?",
+what_p1:"Jego is an agent that drives the Ego Lite browser. Give it a goal such as \"open the comments page of the top-ranked story\" and it clicks, types, and scrolls until the goal is reached.",
+what_p2:"It is a single-file, zero-dependency port of browser-use/jev-ultrafast. Each step sends exactly one typed-choice request to TypeSafe, and it runs in your real, logged-in browser window instead of a headless sandbox.",
+why_h:"Why it is fast",
+why1_h:"Indexed action table",why1_p:"A script in the page walks the DOM and builds a numbered table of every visible control with its ARIA role, label, and current value.",
+why2_h:"No screenshots",why2_p:"No image is sent to a vision model. Only the table goes out, with no chain-of-thought. One response holds both the operation (CLICK / TYPE_TEXT / SELECT / WAIT / DONE) and the target index.",
+why3_h:"One request",why3_p:"There is no second call. A small helper model is used only when a text field needs a value, and it writes just that string.",
+why_bench:"In the bench (bench/BENCHMARK.md) the median decision step took 0.6 to 1.9 seconds. A click-only task (open the top Hacker News comments) finished in about 2.7 s end to end; a 10-step composite search took about 60 s, mostly page animation and the helper model. Small samples (2 runs per task), not a performance promise; your numbers will differ.",
+how_h:"How it works",
+f_table:"action table",f_guard:"freshness guard / hit-test",f_obs:"observe, repeat",
+how_p:"The model can only pick indices from the observed table, never raw selectors or code. Before any input fires, the executor re-checks that the element is connected, visible, enabled, and not covered, and compares a page fingerprint. If the page changed, the decision is dropped and the page is observed again.",
+guide_h:"Guide",
+req_h:"Requirements",
+req1:"Ego Lite installed and running (macOS)",
+req2:"A TypeSafe API key (TYPESAFE_API_KEY)",
+req3:"Optional, for text fields: a key for an OpenAI-compatible chat endpoint, or a signed-in Codex CLI (no key needed)",
+req_note:"No npm install, no build step. The whole agent is one file, jego.js.",
+qs_h:"Quick start",
+qs_p:"run.sh is a thin wrapper. The ego Node runtime does not inherit your shell environment, so the script injects config and secrets as a JEV_ENV header on stdin. Keys never touch argv or disk.",
+kc_h:"Keys from the macOS Keychain",
+kc_p:"run-keychain.sh reads keys from the login Keychain and then calls run.sh, so keys stay out of shell history and dotfiles. Non-secret settings go in jego.local.env (git-ignored).",
+tx_h:"Text fields",
+tx_p:"The helper model is called only when a text field needs a value. Pick one of two options.",
+tx_codex:"Set TEXT_MODEL_PROVIDER=codex and CODEX_BIN (absolute path; the ego runtime does not see your shell PATH). Each text field runs codex exec with TEXT_MODEL (default gpt-6-luna) and TEXT_MODEL_REASONING as the effort (default low). Expect about 5 s per field, versus about 1 s for a direct API call.",
+opt_h:"Options",th_var:"Variable",th_desc:"Description",
+o1:"TypeSafe model (default jev-latest)",o2:"Log every decision",o3:"Keep the result tab open",o4:"Disable the high-risk keyword gate (use with care)",o5:"Task space name",o6:"After a click, switch to a tab the page opened with window.open. Adds up to 0.75 s per click, so it is off by default",
+new_h:"Recent improvements",
+n1_h:"Inner scroll panes",n1_p:"When the window itself does not scroll (common in app shells), Jego offers scrolling for the largest inner scroll pane.",
+n2_h:"Popup following",n2_p:"With JEV_FOLLOW_POPUPS=1, Jego switches to a tab opened by a click.",
+n3_h:"Retry on BLOCKED",n3_p:"A BLOCKED decision on a page that has rendered no controls yet (app boot, viewer load) is retried after a short wait, up to five times.",
+n4_h:"Korean high-risk keywords",n4_p:"The high-risk keyword gate now covers Korean payment, purchase, delete, and send terms, in addition to English and Chinese.",
+n5_h:"Token masking",n5_p:"Query parameters that look like tokens or session IDs are masked in printed URLs.",
+safe_h:"Safety and limits",
+df_h:"Data flow: read this first",
+df_p:"Jego works inside your real, logged-in browser. To make decisions it sends page data to third-party APIs.",
+df1:"Every step: page URL, title, up to 6000 characters of visible text, control labels, and current values of ordinary input fields (password, file, and hidden inputs excluded) go to api.typesafe.ai.",
+df2:"When typing: the same page context, plus your goal and recent actions, goes to the TEXT_MODEL_BASE_URL you configured (OpenAI-compatible, https only), or to OpenAI through your local codex CLI when TEXT_MODEL_PROVIDER=codex.",
+df3:"Terminal output: action labels, typed text, and final URLs print to stdout. API keys never appear in output.",
+gr_h:"Guardrails",
+g1:"High-risk keyword gate (on by default): if an action label matches payment, purchase, delete, send, transfer, authorize, or login terms, the run stops and reports instead of executing. It is a denylist, so it can be bypassed, and link URLs are not inspected.",
+g2:"Cross-domain stop: the run stops if the page leaves the starting host or its subdomains.",
+g3:"Freshness guards: the model only picks observed indices, and the element is re-validated before input.",
+g4:"Hard budgets: 60 actions and 120 model calls per run, plus an automatic stop after 3 consecutive no-op actions.",
+g5:"User takeover: if you take control of the task space, Jego stops immediately.",
+gr_note:"These are mitigations, not guarantees, and they do not replace supervision. Do not run Jego on pages with sensitive information unless you accept the destinations above. You are responsible for the terms of TypeSafe and your text-helper provider.",
+lim_h:"Limits",
+lim_p:"Web pages with a DOM only. No file uploads, canvas, iframes, shadow DOM, or complex keyboard widgets. Date pickers and other composite widgets are the most fragile part; a date goal that cannot be booked makes the agent spin until the budget stops it (it does not click randomly).",
+credit:"MIT license. A port of browser-use/jev-ultrafast (MIT). Ego Lite is an MIT project by CitroLabs. Jego is an unofficial project, not affiliated with CitroLabs or browser-use; \"Ego\" is referenced only to indicate compatibility. TypeSafe (Jev) is a hosted service; bring your own key."
+}};
+function setLang(l){
+  document.documentElement.lang=l;
+  document.querySelectorAll('[data-i18n]').forEach(n=>{const v=T[l][n.dataset.i18n];if(v!==undefined)n.textContent=v;});
+  document.getElementById('b-ko').setAttribute('aria-pressed',l==='ko');
+  document.getElementById('b-en').setAttribute('aria-pressed',l==='en');
+  try{localStorage.setItem('jego-lang',l)}catch(e){}
+}
+document.getElementById('b-ko').onclick=()=>setLang('ko');
+document.getElementById('b-en').onclick=()=>setLang('en');
+let saved='ko';try{saved=localStorage.getItem('jego-lang')||'ko'}catch(e){}
+setLang(saved==='en'?'en':'ko');
+</script>
+</body>
+</html>
