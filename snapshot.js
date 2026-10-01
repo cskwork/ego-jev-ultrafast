@@ -21,6 +21,13 @@
         n.nodeType===1 && n.getAttribute('aria-hidden')!=='true' ? name(n,seen) : '').join(' ').trim()) ||
       e.getAttribute('title') || e.getAttribute('placeholder') || '';
   };
+  // Icon-only controls with no accessible name: fall back to the image file
+  // name ("teacher-btn.png" -> "image: teacher-btn") so the model can tell them apart.
+  const imgHint = e => {
+    const img=e.tagName==='IMG' ? e : e.querySelector('img');
+    const file=(img?.getAttribute('src')||'').split(/[?#]/)[0].split('/').pop().replace(/\.[a-z0-9]+$/i,'');
+    return file && !file.startsWith('data:') ? 'image: '+file.slice(0,60) : '';
+  };
   const roles=['button','link','checkbox','radio','switch','tab','menuitem','menuitemradio',
     'option','gridcell','combobox','textbox','searchbox','spinbutton'];
   const selector='a[href],button,input,textarea,select,summary,[contenteditable="true"],'+
@@ -58,7 +65,7 @@
     const r=e.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2, rname=role(e);
     if (!rname || r.width<=0 || r.height<=0 || x<0 || y<0 || x>=innerWidth || y>=innerHeight) continue;
     if (rname==='gridcell' && e.querySelector('button,[role="button"]')) continue;
-    const base={node:identity(e),role:rname,label:name(e)||rname,
+    const base={node:identity(e),role:rname,label:name(e)||imgHint(e)||rname,
       rect:{x:r.x,y:r.y,w:r.width,h:r.height}};
     for (const key of ['checked','selected','expanded']) {
       const value=e.getAttribute('aria-'+key);
@@ -78,6 +85,20 @@
       actions.push({...base,kind:editable?'fill':'click',value});
       if (editable) actions.push({...base,kind:'click',value,label:'Open '+base.label});
     }
+  }
+  // App shells often make list rows and cards clickable with a JS handler on a
+  // plain element. Offer the outermost cursor:pointer element that has text and
+  // holds no real control (so a click can never land on a nested button).
+  for (const e of document.body.querySelectorAll('div,li,span,p,td,tr,section,article,img,label')) {
+    if (e.closest(selector) || e.querySelector(selector) || !visible(e)) continue;
+    if (getComputedStyle(e).cursor!=='pointer') continue;
+    if (e.parentElement && getComputedStyle(e.parentElement).cursor==='pointer') continue;
+    const label=name(e).replace(/\s+/g,' ').trim().slice(0,160);
+    if (!label) continue;
+    const r=e.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2;
+    if (r.width<=0 || r.height<=0 || x<0 || y<0 || x>=innerWidth || y>=innerHeight) continue;
+    actions.push({node:identity(e),role:'clickable',label,rect:{x:r.x,y:r.y,w:r.width,h:r.height},
+      kind:'click',value:''});
   }
   const words=[], walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
   const range=document.createRange(); let node,length=0;

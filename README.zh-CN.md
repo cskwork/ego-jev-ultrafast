@@ -31,7 +31,7 @@
 | 文件 | 说明 |
 |---|---|
 | `jego.js` | 全部逻辑：model / driver / agent loop / CLI（snapshot.js 已内联） |
-| `snapshot.js` | 上游 DOM 快照脚本，仅增加内部滚动区域支持（改它后要重新内联进 jego.js） |
+| `snapshot.js` | 上游 DOM 快照脚本，增加内部滚动区域与脚本可点击元素支持（改它后要重新内联进 jego.js） |
 | `run.sh` | 启动包装：把配置/密钥以 `JEV_ENV` 头注入 stdin（ego nodejs 不继承 shell 环境） |
 | `bench.sh` / `bench/` | 多模型测评脚本与报告 |
 
@@ -134,7 +134,7 @@ Ego 适配中新增的两处 settle 逻辑（上游没有的）：
 
 MIT（见 `LICENSE`）。本项目是
 [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast) 的移植，
-`snapshot.js` 来自上游（仅增加内部滚动区域支持），上游完整 MIT 许可文本已附在 `LICENSE` 的
+`snapshot.js` 来自上游（增加内部滚动区域与脚本可点击元素支持），上游完整 MIT 许可文本已附在 `LICENSE` 的
 THIRD-PARTY NOTICES 一节。Ego Lite 为
 [CitroLabs 的 MIT 项目](https://github.com/citrolabs/ego-lite)，本项目仅通过
 其公开 CLI 调用，不包含其代码。TypeSafe (Jev) 为托管服务，需自备账号与 Key。

@@ -15,7 +15,7 @@ header=$(python3 -c '
 import json, os
 keys = ["JEV_URL","JEV_GOAL","TYPESAFE_API_KEY","TYPESAFE_MODEL",
         "TEXT_MODEL_API_KEY","TEXT_MODEL_BASE_URL","TEXT_MODEL","TEXT_MODEL_REASONING","DEBUG","JEV_KEEP","JEV_AUTO","JEV_SPACE",
-        "TEXT_MODEL_PROVIDER","CODEX_BIN","JEV_FOLLOW_POPUPS"]
+        "TEXT_MODEL_PROVIDER","CODEX_BIN","JEV_FOLLOW_POPUPS","JEV_MAX_REPEAT","JEV_EXPECT","JEV_SHOT"]
 print("globalThis.JEV_ENV = " + json.dumps({k: os.environ[k] for k in keys if k in os.environ}) + ";")
 ')
 

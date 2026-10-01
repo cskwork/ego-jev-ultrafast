@@ -257,20 +257,29 @@ async function codexText(context, model) {
     const args = ["exec", "-m", model, "-c", `model_reasoning_effort=${env("TEXT_MODEL_REASONING", "low")}`,
       "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check", "--ephemeral",
       "-s", "read-only", "-o", out, "-"];
+    let log = "";
     const code = await new Promise((resolve, reject) => {
       // codex is a node script; the ego runtime PATH lacks the node it needs.
       const child = spawn(bin, args, {
         cwd: dir,
-        stdio: ["pipe", "ignore", "ignore"],
+        stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env, PATH: `${dirname(bin)}:${process.env.PATH ?? ""}` },
       });
+      // Only the trailing "tokens used" summary is read from the logs.
+      const keep = (d) => (log = (log + d).slice(-2000));
+      child.stdout.on("data", keep);
+      child.stderr.on("data", keep);
       const timer = setTimeout(() => child.kill("SIGKILL"), 60000);
       child.on("error", reject);
       child.on("close", (c) => (clearTimeout(timer), resolve(c)));
       child.stdin.end(`${TEXT_VALUE}\n\nReply with the JSON object only.\n\n${JSON.stringify(context)}`);
     });
     if (code !== 0) throw new Error(`codex exec exited with ${code}; nothing typed.`);
-    return (await readFile(out, "utf8")).trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
+    const tokens = log.match(/tokens used\s*([\d,]+)/i);
+    return {
+      content: (await readFile(out, "utf8")).trim().replace(/^```(?:json)?\s*|\s*```$/g, ""),
+      usage: tokens ? { total_tokens: Number(tokens[1].replace(/,/g, "")) } : {},
+    };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -281,7 +290,7 @@ async function fieldText(context) {
   let model, content, usage = {};
   if (env("TEXT_MODEL_PROVIDER") === "codex") {
     model = env("TEXT_MODEL", "gpt-6-luna");
-    content = await codexText(context, model);
+    ({ content, usage } = await codexText(context, model));
   } else {
     const key = env("TEXT_MODEL_API_KEY");
     if (!key)
@@ -331,7 +340,7 @@ async function fieldText(context) {
 // browser driver over the ego-browser SDK (port of browser.py)
 // ---------------------------------------------------------------------------
 
-const READ_STATE = "(() => {\n  if (!document.body) return null;\n  const cache = window.__jevFast ||= {ids:new WeakMap(), nodes:new Map(), next:1};\n  const identity = e => {\n    if (!cache.ids.has(e)) cache.ids.set(e,cache.next++);\n    const id=cache.ids.get(e); cache.nodes.set(id,e); return id;\n  };\n  for (const [id,e] of cache.nodes) if (!e.isConnected) cache.nodes.delete(id);\n  const safe = e => !['password','file','hidden'].includes(e.type);\n  const visible = e => !e.closest('[aria-hidden=\"true\"],[inert]') &&\n    e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true});\n  const name = (e,seen=new Set()) => {\n    if (!e || seen.has(e)) return '';\n    seen.add(e);\n    const referenced=(e.getAttribute('aria-labelledby')||'').split(/\\s+/)\n      .map(id=>name(document.getElementById(id),seen)).filter(Boolean).join(' ');\n    return referenced || e.getAttribute('aria-label') ||\n      [...(e.labels||[])].map(l=>name(l,seen)).filter(Boolean).join(' ') ||\n      (['button','submit','reset'].includes(e.type) ? e.value : '') || e.getAttribute('alt') ||\n      (e.tagName==='INPUT' ? '' : [...e.childNodes].map(n=>n.nodeType===3 ? n.textContent :\n        n.nodeType===1 && n.getAttribute('aria-hidden')!=='true' ? name(n,seen) : '').join(' ').trim()) ||\n      e.getAttribute('title') || e.getAttribute('placeholder') || '';\n  };\n  const roles=['button','link','checkbox','radio','switch','tab','menuitem','menuitemradio',\n    'option','gridcell','combobox','textbox','searchbox','spinbutton'];\n  const selector='a[href],button,input,textarea,select,summary,[contenteditable=\"true\"],'+\n    roles.map(role=>'[role=\"'+role+'\"]').join(',');\n  const role = e => {\n    const explicit=e.getAttribute('role');\n    if (roles.includes(explicit)) return explicit;\n    if (e.tagName==='BUTTON' || e.tagName==='SUMMARY') return 'button';\n    if (e.tagName==='A') return 'link';\n    if (e.tagName==='SELECT') return 'combobox';\n    if (e.tagName==='TEXTAREA' || e.isContentEditable) return 'textbox';\n    if (e.tagName==='INPUT') {\n      if (['checkbox','radio'].includes(e.type)) return e.type;\n      if (['button','submit','reset','image'].includes(e.type)) return 'button';\n      if (e.type==='search') return 'searchbox';\n      if (e.type==='number') return 'spinbutton';\n      if (['text','email','url','tel'].includes(e.type)) return 'textbox';\n    }\n    return null;\n  };\n  cache.pageKey=()=>[performance.timeOrigin,location.href,scrollX,scrollY,innerWidth,innerHeight,\n    [...document.querySelectorAll('input,textarea,select')].filter(safe)\n      .map(e=>[identity(e),e.value,e.checked,e.selectedIndex,e.disabled,e.readOnly])];\n  cache.guard=e=>{\n    if (!e?.isConnected || !visible(e)) return null;\n    const scope=e.closest('form,dialog,[role=\"dialog\"],article,li,tr,[role=\"row\"]') || e.parentElement;\n    return [identity(e),role(e),name(e),e.value??null,e.checked??null,e.selectedIndex??null,\n      e.readOnly??null,e.matches(':disabled'),e.getAttribute('aria-disabled'),\n      e.getAttribute('aria-expanded'),e.getAttribute('aria-checked'),e.getAttribute('aria-selected'),\n      e.getAttribute('href'),scope?.innerText?.slice(0,6000)||''];\n  };\n  const actions=[];\n  for (const e of document.querySelectorAll(selector)) {\n    if (!safe(e) || !visible(e) || e.matches(':disabled') || e.closest('[aria-disabled=\"true\"]')) continue;\n    const r=e.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2, rname=role(e);\n    if (!rname || r.width<=0 || r.height<=0 || x<0 || y<0 || x>=innerWidth || y>=innerHeight) continue;\n    if (rname==='gridcell' && e.querySelector('button,[role=\"button\"]')) continue;\n    const base={node:identity(e),role:rname,label:name(e)||rname,\n      rect:{x:r.x,y:r.y,w:r.width,h:r.height}};\n    for (const key of ['checked','selected','expanded']) {\n      const value=e.getAttribute('aria-'+key);\n      if (value!==null) base[key]=value;\n    }\n    if (['checkbox','radio'].includes(e.type)) base.checked=String(e.checked);\n    if (e.tagName==='SELECT') {\n      for (const o of e.options) if (!o.selected && !o.disabled && !o.closest('optgroup[disabled]'))\n        actions.push({...base,kind:'select',value:o.value,\n          current_value:[...e.selectedOptions].map(o=>o.label).join(', '),label:base.label+' \u2192 '+o.label});\n    } else {\n      const editable=!e.readOnly && e.getAttribute('aria-readonly')!=='true' &&\n        (['textbox','searchbox','spinbutton'].includes(rname) ||\n          (rname==='combobox' && ['INPUT','TEXTAREA'].includes(e.tagName)));\n      const value='value' in e ? String(e.value) :\n        e.isContentEditable || rname==='combobox' ? e.innerText.trim() : '';\n      actions.push({...base,kind:editable?'fill':'click',value});\n      if (editable) actions.push({...base,kind:'click',value,label:'Open '+base.label});\n    }\n  }\n  const words=[], walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);\n  const range=document.createRange(); let node,length=0;\n  while ((node=walker.nextNode()) && length<6000) {\n    const value=node.textContent.trim(), parent=node.parentElement;\n    if (!value || !parent || parent.closest('script,style,noscript,template') || !visible(parent)) continue;\n    range.selectNodeContents(node); const r=range.getBoundingClientRect();\n    if (r.width>0 && r.height>0 && r.bottom>0 && r.top<innerHeight && r.right>0 && r.left<innerWidth) {\n      words.push(value); length+=value.length;\n    }\n  }\n  const text=words.join('\\n').slice(0,6000), height=document.documentElement.scrollHeight;\n  const page_key=cache.pageKey(), guards={};\n  for (const a of actions) if (!(a.node in guards)) guards[a.node]=cache.guard(cache.nodes.get(a.node));\n  // Compare meaning and identity. Geometry is always resolved and hit-tested just before input.\n  const semantics=actions.map(({rect,...action})=>action);\n  const marker=[performance.timeOrigin,location.href,scrollX,scrollY,innerWidth,innerHeight,\n    document.title,text,semantics,page_key[6]];\n  const omitted_actions=Math.max(0,actions.length-250);\n  actions.splice(250);\n  actions.forEach((a,i)=>a.id='e'+(i+1));\n  // Apps that pin the window and scroll an inner pane: offer that pane's scroll instead.\n  const pane=height>innerHeight+2 ? null : [...document.querySelectorAll('body *')]\n    .filter(e=>e.scrollHeight>e.clientHeight+2 && e.clientHeight>innerHeight/3 && /auto|scroll/.test(getComputedStyle(e).overflowY))\n    .sort((a,b)=>b.clientWidth*b.clientHeight-a.clientWidth*a.clientHeight)[0];\n  const pr=pane?.getBoundingClientRect(), sy=pane?pane.scrollTop:scrollY;\n  const wheel=pr ? {x:Math.round(Math.min(Math.max(pr.x+pr.width/2,1),innerWidth-1)),\n    y:Math.round(Math.min(Math.max(pr.y+pr.height/2,1),innerHeight-1))} : {};\n  if (pane ? sy+pane.clientHeight<pane.scrollHeight-2 : scrollY+innerHeight<height-2)\n    actions.push({id:'scroll_down',kind:'scroll',label:'Scroll down',delta:560,...wheel});\n  if (sy>0) actions.push({id:'scroll_up',kind:'scroll',label:'Scroll up',delta:-560,...wheel});\n  actions.push({id:'wait',kind:'wait',label:'Wait for the page to update'});\n  return {url:location.href,title:document.title,w:innerWidth,h:innerHeight,text,\n    scroll:{y:scrollY,height},actions,marker,page_key,guards,omitted_actions};\n})()\n";
+const READ_STATE = "(() => {\n  if (!document.body) return null;\n  const cache = window.__jevFast ||= {ids:new WeakMap(), nodes:new Map(), next:1};\n  const identity = e => {\n    if (!cache.ids.has(e)) cache.ids.set(e,cache.next++);\n    const id=cache.ids.get(e); cache.nodes.set(id,e); return id;\n  };\n  for (const [id,e] of cache.nodes) if (!e.isConnected) cache.nodes.delete(id);\n  const safe = e => !['password','file','hidden'].includes(e.type);\n  const visible = e => !e.closest('[aria-hidden=\"true\"],[inert]') &&\n    e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true});\n  const name = (e,seen=new Set()) => {\n    if (!e || seen.has(e)) return '';\n    seen.add(e);\n    const referenced=(e.getAttribute('aria-labelledby')||'').split(/\\s+/)\n      .map(id=>name(document.getElementById(id),seen)).filter(Boolean).join(' ');\n    return referenced || e.getAttribute('aria-label') ||\n      [...(e.labels||[])].map(l=>name(l,seen)).filter(Boolean).join(' ') ||\n      (['button','submit','reset'].includes(e.type) ? e.value : '') || e.getAttribute('alt') ||\n      (e.tagName==='INPUT' ? '' : [...e.childNodes].map(n=>n.nodeType===3 ? n.textContent :\n        n.nodeType===1 && n.getAttribute('aria-hidden')!=='true' ? name(n,seen) : '').join(' ').trim()) ||\n      e.getAttribute('title') || e.getAttribute('placeholder') || '';\n  };\n  // Icon-only controls with no accessible name: fall back to the image file\n  // name (\"teacher-btn.png\" -> \"image: teacher-btn\") so the model can tell them apart.\n  const imgHint = e => {\n    const img=e.tagName==='IMG' ? e : e.querySelector('img');\n    const file=(img?.getAttribute('src')||'').split(/[?#]/)[0].split('/').pop().replace(/\\.[a-z0-9]+$/i,'');\n    return file && !file.startsWith('data:') ? 'image: '+file.slice(0,60) : '';\n  };\n  const roles=['button','link','checkbox','radio','switch','tab','menuitem','menuitemradio',\n    'option','gridcell','combobox','textbox','searchbox','spinbutton'];\n  const selector='a[href],button,input,textarea,select,summary,[contenteditable=\"true\"],'+\n    roles.map(role=>'[role=\"'+role+'\"]').join(',');\n  const role = e => {\n    const explicit=e.getAttribute('role');\n    if (roles.includes(explicit)) return explicit;\n    if (e.tagName==='BUTTON' || e.tagName==='SUMMARY') return 'button';\n    if (e.tagName==='A') return 'link';\n    if (e.tagName==='SELECT') return 'combobox';\n    if (e.tagName==='TEXTAREA' || e.isContentEditable) return 'textbox';\n    if (e.tagName==='INPUT') {\n      if (['checkbox','radio'].includes(e.type)) return e.type;\n      if (['button','submit','reset','image'].includes(e.type)) return 'button';\n      if (e.type==='search') return 'searchbox';\n      if (e.type==='number') return 'spinbutton';\n      if (['text','email','url','tel'].includes(e.type)) return 'textbox';\n    }\n    return null;\n  };\n  cache.pageKey=()=>[performance.timeOrigin,location.href,scrollX,scrollY,innerWidth,innerHeight,\n    [...document.querySelectorAll('input,textarea,select')].filter(safe)\n      .map(e=>[identity(e),e.value,e.checked,e.selectedIndex,e.disabled,e.readOnly])];\n  cache.guard=e=>{\n    if (!e?.isConnected || !visible(e)) return null;\n    const scope=e.closest('form,dialog,[role=\"dialog\"],article,li,tr,[role=\"row\"]') || e.parentElement;\n    return [identity(e),role(e),name(e),e.value??null,e.checked??null,e.selectedIndex??null,\n      e.readOnly??null,e.matches(':disabled'),e.getAttribute('aria-disabled'),\n      e.getAttribute('aria-expanded'),e.getAttribute('aria-checked'),e.getAttribute('aria-selected'),\n      e.getAttribute('href'),scope?.innerText?.slice(0,6000)||''];\n  };\n  const actions=[];\n  for (const e of document.querySelectorAll(selector)) {\n    if (!safe(e) || !visible(e) || e.matches(':disabled') || e.closest('[aria-disabled=\"true\"]')) continue;\n    const r=e.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2, rname=role(e);\n    if (!rname || r.width<=0 || r.height<=0 || x<0 || y<0 || x>=innerWidth || y>=innerHeight) continue;\n    if (rname==='gridcell' && e.querySelector('button,[role=\"button\"]')) continue;\n    const base={node:identity(e),role:rname,label:name(e)||imgHint(e)||rname,\n      rect:{x:r.x,y:r.y,w:r.width,h:r.height}};\n    for (const key of ['checked','selected','expanded']) {\n      const value=e.getAttribute('aria-'+key);\n      if (value!==null) base[key]=value;\n    }\n    if (['checkbox','radio'].includes(e.type)) base.checked=String(e.checked);\n    if (e.tagName==='SELECT') {\n      for (const o of e.options) if (!o.selected && !o.disabled && !o.closest('optgroup[disabled]'))\n        actions.push({...base,kind:'select',value:o.value,\n          current_value:[...e.selectedOptions].map(o=>o.label).join(', '),label:base.label+' \u2192 '+o.label});\n    } else {\n      const editable=!e.readOnly && e.getAttribute('aria-readonly')!=='true' &&\n        (['textbox','searchbox','spinbutton'].includes(rname) ||\n          (rname==='combobox' && ['INPUT','TEXTAREA'].includes(e.tagName)));\n      const value='value' in e ? String(e.value) :\n        e.isContentEditable || rname==='combobox' ? e.innerText.trim() : '';\n      actions.push({...base,kind:editable?'fill':'click',value});\n      if (editable) actions.push({...base,kind:'click',value,label:'Open '+base.label});\n    }\n  }\n  // App shells often make list rows and cards clickable with a JS handler on a\n  // plain element. Offer the outermost cursor:pointer element that has text and\n  // holds no real control (so a click can never land on a nested button).\n  for (const e of document.body.querySelectorAll('div,li,span,p,td,tr,section,article,img,label')) {\n    if (e.closest(selector) || e.querySelector(selector) || !visible(e)) continue;\n    if (getComputedStyle(e).cursor!=='pointer') continue;\n    if (e.parentElement && getComputedStyle(e.parentElement).cursor==='pointer') continue;\n    const label=name(e).replace(/\\s+/g,' ').trim().slice(0,160);\n    if (!label) continue;\n    const r=e.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2;\n    if (r.width<=0 || r.height<=0 || x<0 || y<0 || x>=innerWidth || y>=innerHeight) continue;\n    actions.push({node:identity(e),role:'clickable',label,rect:{x:r.x,y:r.y,w:r.width,h:r.height},\n      kind:'click',value:''});\n  }\n  const words=[], walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);\n  const range=document.createRange(); let node,length=0;\n  while ((node=walker.nextNode()) && length<6000) {\n    const value=node.textContent.trim(), parent=node.parentElement;\n    if (!value || !parent || parent.closest('script,style,noscript,template') || !visible(parent)) continue;\n    range.selectNodeContents(node); const r=range.getBoundingClientRect();\n    if (r.width>0 && r.height>0 && r.bottom>0 && r.top<innerHeight && r.right>0 && r.left<innerWidth) {\n      words.push(value); length+=value.length;\n    }\n  }\n  const text=words.join('\\n').slice(0,6000), height=document.documentElement.scrollHeight;\n  const page_key=cache.pageKey(), guards={};\n  for (const a of actions) if (!(a.node in guards)) guards[a.node]=cache.guard(cache.nodes.get(a.node));\n  // Compare meaning and identity. Geometry is always resolved and hit-tested just before input.\n  const semantics=actions.map(({rect,...action})=>action);\n  const marker=[performance.timeOrigin,location.href,scrollX,scrollY,innerWidth,innerHeight,\n    document.title,text,semantics,page_key[6]];\n  const omitted_actions=Math.max(0,actions.length-250);\n  actions.splice(250);\n  actions.forEach((a,i)=>a.id='e'+(i+1));\n  // Apps that pin the window and scroll an inner pane: offer that pane's scroll instead.\n  const pane=height>innerHeight+2 ? null : [...document.querySelectorAll('body *')]\n    .filter(e=>e.scrollHeight>e.clientHeight+2 && e.clientHeight>innerHeight/3 && /auto|scroll/.test(getComputedStyle(e).overflowY))\n    .sort((a,b)=>b.clientWidth*b.clientHeight-a.clientWidth*a.clientHeight)[0];\n  const pr=pane?.getBoundingClientRect(), sy=pane?pane.scrollTop:scrollY;\n  const wheel=pr ? {x:Math.round(Math.min(Math.max(pr.x+pr.width/2,1),innerWidth-1)),\n    y:Math.round(Math.min(Math.max(pr.y+pr.height/2,1),innerHeight-1))} : {};\n  if (pane ? sy+pane.clientHeight<pane.scrollHeight-2 : scrollY+innerHeight<height-2)\n    actions.push({id:'scroll_down',kind:'scroll',label:'Scroll down',delta:560,...wheel});\n  if (sy>0) actions.push({id:'scroll_up',kind:'scroll',label:'Scroll up',delta:-560,...wheel});\n  actions.push({id:'wait',kind:'wait',label:'Wait for the page to update'});\n  return {url:location.href,title:document.title,w:innerWidth,h:innerHeight,text,\n    scroll:{y:scrollY,height},actions,marker,page_key,guards,omitted_actions};\n})()\n";
 const MARKER = `(() => { const state=${READ_STATE}; return state?.marker ?? null; })()`;
 
 class StalePage extends Error {}
@@ -588,6 +597,8 @@ class Agent {
     const agent = new Agent();
     agent.pendingText = null;
     agent.emptyBlocks = 0;
+    agent.visits = new Map();
+    agent.suppressed = new Set();
     agent.browser = new EgoDriver();
     await agent.browser.open(url);
     let page;
@@ -642,7 +653,11 @@ class Agent {
       throw new Error("This run has stopped. Start a fresh demo.");
     if (state.decisions.length >= MAX_STEPS * 2)
       throw new Error("Reached the demo's model-call budget");
-    state.decision = await choose(state.page, state.goal, state.history);
+    // Actions caught looping are hidden from the model; ids stay stable for act().
+    const offered = this.suppressed?.size
+      ? { ...state.page, actions: state.page.actions.filter((a) => !this.suppressed.has(`${a.kind}|${a.label}`)) }
+      : state.page;
+    state.decision = await choose(offered, state.goal, state.history);
     if (env("DEBUG"))
       console.error(
         `debug predict: ${state.decision.operation} choice=${state.decision.choice} ` +
@@ -682,6 +697,24 @@ class Agent {
       state.status = "ready";
       state.elapsed_ms = Math.round(performance.now() - state.started_at);
       return this.snapshot();
+    }
+    // JEV_EXPECT ("text one|text two"): DONE is accepted only when every expected
+    // text is on the page, so a model's self-report cannot pass a QA check alone.
+    if (selected === "DONE" && expectedTexts().length) {
+      const missing = await this.missingExpected();
+      if (missing.length) {
+        this.rejectedDone = (this.rejectedDone ?? 0) + 1;
+        if (this.rejectedDone >= 3) {
+          state.status = "blocked";
+          state.block_reason = `DONE claimed but expected text is missing: ${missing.join(", ")}`;
+        } else {
+          await sleep(500);
+          state.page = await this.browser.observe();
+          state.status = "ready";
+        }
+        state.elapsed_ms = Math.round(performance.now() - state.started_at);
+        return this.snapshot();
+      }
     }
     if (selected === "DONE" || selected === "BLOCKED") {
       if (!(await this.browser.fresh(page))) {
@@ -776,6 +809,28 @@ class Agent {
     last.page_changed = state.page.fingerprint !== page.fingerprint;
     last.url = state.page.url;
     last.elapsed_ms = state.elapsed_ms;
+    // Loop guards. "page changed" alone misses toggles (a menu that opens and
+    // closes) and pages that re-render slightly on every click.
+    if (action.kind === "click" || action.kind === "select") {
+      const key = `${action.kind}|${action.label}`;
+      // 1) The same action leading back to a state it already produced twice
+      //    is hidden from later decisions so the model must try something else.
+      const visit = `${key}|${state.page.fingerprint}`;
+      this.visits.set(visit, (this.visits.get(visit) ?? 0) + 1);
+      if (this.visits.get(visit) >= 2) this.suppressed.add(key);
+      // 2) Hard cap on identical consecutive actions (JEV_MAX_REPEAT, default 8).
+      const maxRepeat = Math.max(2, Number(env("JEV_MAX_REPEAT", "8")) || 8);
+      const tail = state.history.slice(-maxRepeat);
+      if (state.status !== "blocked" && tail.length === maxRepeat &&
+          tail.every((h) => h.kind === action.kind && h.action === action.label)) {
+        state.status = "blocked";
+        state.block_reason = `Repeated "${action.label}" ${maxRepeat} times in a row without finishing; stopped to avoid a loop.`;
+      }
+      if (state.status !== "blocked" && this.suppressed.size >= 4) {
+        state.status = "blocked";
+        state.block_reason = "Several actions kept returning to the same pages; stopped to avoid a loop.";
+      }
+    }
     if (state.status !== "blocked") {
       const repeated = state.history.slice(-3);
       state.status =
@@ -793,6 +848,11 @@ class Agent {
       void snap;
     }
     return this.state;
+  }
+
+  async missingExpected() {
+    const body = String((await this.browser.evaluate("document.body ? document.body.innerText : ''")) ?? "");
+    return expectedTexts().filter((t) => !body.includes(t));
   }
 
   async close(keep = false, ok = true) {
@@ -814,6 +874,19 @@ function redactUrl(raw) {
   } catch {
     return raw;
   }
+}
+
+function expectedTexts() {
+  return String(env("JEV_EXPECT", "")).split("|").map((s) => s.trim()).filter(Boolean);
+}
+
+// Adds up the numeric fields of provider usage objects (tokens, cost, ...).
+function sumUsage(list) {
+  const total = {};
+  for (const u of list) {
+    for (const [k, v] of Object.entries(u ?? {})) if (typeof v === "number") total[k] = (total[k] ?? 0) + v;
+  }
+  return total;
 }
 
 function parseArgs(argv) {
@@ -857,6 +930,24 @@ try {
       );
     }
   });
+  // QA evidence: expected-text result and a screenshot of the final page.
+  let expectMissing = null;
+  if (expectedTexts().length) {
+    try {
+      expectMissing = await agent.missingExpected();
+    } catch {
+      expectMissing = expectedTexts();
+    }
+  }
+  let shot = null;
+  if (env("JEV_SHOT")) {
+    try {
+      await agent.browser.page.screenshot({ path: env("JEV_SHOT") });
+      shot = env("JEV_SHOT");
+    } catch (e) {
+      console.error(`screenshot failed: ${e?.message || e}`);
+    }
+  }
   console.log(
     JSON.stringify(
       {
@@ -865,7 +956,12 @@ try {
         final_url: redactUrl(state.page.url),
         steps: state.history.length,
         text_calls: state.text_calls.length,
+        model_calls: state.decisions.length,
+        usage: sumUsage(state.decisions.map((d) => d.usage)),
+        text_usage: sumUsage(state.text_calls.map((t) => t.usage)),
         block_reason: state.block_reason ?? null,
+        expect_missing: expectMissing,
+        screenshot: shot,
         history: state.history.map((h) => ({
           step: h.step,
           operation: h.operation,

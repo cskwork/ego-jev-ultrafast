@@ -96,7 +96,21 @@ Optional variables: `TYPESAFE_MODEL` (default `jev-latest`), `DEBUG=1` (log
 every decision), `JEV_KEEP=1` (keep the result tab open), `JEV_AUTO=1`
 (disable the high-risk keyword gate), `JEV_SPACE` (task space name),
 `JEV_FOLLOW_POPUPS=1` (after a click, switch to a tab the page opened with
-`window.open`; adds up to 0.75 s per click, so it is off by default).
+`window.open`; adds up to 0.75 s per click, so it is off by default),
+`JEV_MAX_REPEAT` (identical consecutive clicks before the run stops, default 8).
+
+### Using it for QA
+
+The model's own DONE is not proof. Two options make a run checkable:
+
+- `JEV_EXPECT="text one|text two"`: DONE is accepted only if every text is on
+  the page; otherwise the agent keeps going, and after three rejected DONEs the
+  run stops as blocked. The final JSON has `expect_missing` (empty = passed).
+- `JEV_SHOT=/abs/path/final.png`: saves a screenshot of the final page before
+  the tab closes, including popups and viewers that cannot be reopened later.
+
+The final JSON also reports `model_calls`, `usage` (TypeSafe tokens), and
+`text_usage` (text-helper tokens) for cost tracking.
 
 ### Keys from the macOS Keychain
 
@@ -138,6 +152,10 @@ replace supervision.
   decision and forces a fresh observation.
 - **Hard budgets**: 60 actions and 120 model calls per run, plus an
   automatic stop after 3 consecutive no-op actions.
+- **Loop guards**: an action that keeps leading back to a page state it
+  already produced (menu toggles, tabs flipping back) is hidden from later
+  decisions; the same click repeated `JEV_MAX_REPEAT` times (default 8) stops
+  the run with a reason.
 - **User takeover**: if you take control of the task space, Jego stops
   immediately and leaves the space alone.
 - **Other**: http/https only for the start URL, best-effort download
@@ -161,9 +179,11 @@ page ──> snapshot.js ──> indexed action table ──> TypeSafe (1 reques
                               observe, repeat
 ```
 
-- `snapshot.js` comes from upstream with one change: when the window itself
+- `snapshot.js` comes from upstream with two changes: when the window itself
   does not scroll, it offers scrolling for the largest inner scroll pane
-  (common in app shells that pin the window). It assigns stable IDs to real
+  (common in app shells that pin the window), and it offers plain elements
+  made clickable by script (the outermost `cursor: pointer` element with text
+  and no real control inside, e.g. list rows and cards). It assigns stable IDs to real
   DOM nodes via a `WeakMap`, collects visible controls and page text, and
   produces a page marker used for staleness checks. A copy is inlined in
   `jego.js` as `READ_STATE`; keep the two identical.
@@ -213,7 +233,7 @@ Reproduce with `bench.sh` (env vars: `ZAI_API_KEY`, `DASHSCOPE_API_KEY`,
 MIT, see [LICENSE](LICENSE). Jego is a port of
 [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast)
 (MIT, copyright Browser Use); `snapshot.js` is copied with the inner-pane
-scroll change described above, and the
+scroll and clickable-element changes described above, and the
 upstream license text is reproduced in the THIRD-PARTY NOTICES section.
 Ego Lite is an MIT project by CitroLabs; Jego only calls its public CLI and
 contains none of its code. Jego is an unofficial project, not affiliated

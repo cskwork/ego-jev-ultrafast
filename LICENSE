@@ -27,7 +27,7 @@ THIRD-PARTY NOTICES
 Jego is a port of jev-ultrafast
 (https://github.com/browser-use/jev-ultrafast). The DOM snapshot script
 (snapshot.js, also inlined inside jego.js) is copied from that
-project, with a small change for scrolling inner panes. Its original license text follows verbatim:
+project, with small changes for inner-pane scrolling and script-clickable elements. Its original license text follows verbatim:
 
 ------------------------------------------------------------
 MIT License
