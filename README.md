@@ -112,6 +112,14 @@ The model's own DONE is not proof. Two options make a run checkable:
 The final JSON also reports `model_calls`, `usage` (TypeSafe tokens), and
 `text_usage` (text-helper tokens) for cost tracking.
 
+For a list of scenarios with one HTML report (screenshots, time, and cost per
+scenario), use the runner in [`qa/`](qa/README.md):
+
+```bash
+node qa/run.mjs qa/examples/public-sites.mjs --out /tmp/jego-qa
+node qa/report.mjs /tmp/jego-qa --open
+```
+
 ### Keys from the macOS Keychain
 
 `run-keychain.sh` reads keys from the login Keychain and then calls `run.sh`,
