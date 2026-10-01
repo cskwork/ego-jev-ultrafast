@@ -48,9 +48,11 @@ page data to third-party APIs:
   file, and hidden inputs are excluded) go to `api.typesafe.ai`.
 - **When typing**: the same page context, plus your goal and recent actions,
   goes to the `TEXT_MODEL_BASE_URL` you configured (any OpenAI-compatible
-  endpoint, https only).
+  endpoint, https only), or to OpenAI through your local `codex` CLI when
+  `TEXT_MODEL_PROVIDER=codex`.
 - **Terminal output**: action labels, typed text, and final URLs print to
-  stdout. API keys never appear in any output.
+  stdout. API keys never appear in any output, and query parameters that look
+  like tokens or session IDs are masked in printed URLs.
 
 Do not run Jego on pages that contain sensitive information unless you are
 comfortable with these destinations. You are responsible for the terms of
@@ -61,14 +63,15 @@ TypeSafe and of whichever text-helper provider you choose.
 - [Ego Lite](https://github.com/citrolabs/ego-lite) installed and running
   (macOS).
 - A TypeSafe API key (`TYPESAFE_API_KEY`).
-- Optional, for text fields: a key for any OpenAI-compatible chat endpoint.
+- Optional, for text fields: a key for any OpenAI-compatible chat endpoint,
+  or a signed-in [Codex CLI](https://github.com/openai/codex) (no key needed).
 
 No npm install, no build step. The whole agent is one file, `jego.js`.
 
 ## Quick start
 
 ```bash
-git clone https://github.com/shikaizhong-design/jego && cd jego
+git clone https://github.com/cskwork/ego-jev-ultrafast && cd ego-jev-ultrafast
 export TYPESAFE_API_KEY=<your TypeSafe key>
 
 # click-only task
@@ -91,7 +94,29 @@ stdin. Keys never touch argv or disk.
 
 Optional variables: `TYPESAFE_MODEL` (default `jev-latest`), `DEBUG=1` (log
 every decision), `JEV_KEEP=1` (keep the result tab open), `JEV_AUTO=1`
-(disable the high-risk keyword gate), `JEV_SPACE` (task space name).
+(disable the high-risk keyword gate), `JEV_SPACE` (task space name),
+`JEV_FOLLOW_POPUPS=1` (after a click, switch to a tab the page opened with
+`window.open`; adds up to 0.75 s per click, so it is off by default).
+
+### Keys from the macOS Keychain
+
+`run-keychain.sh` reads keys from the login Keychain and then calls `run.sh`,
+so keys stay out of shell history and dotfiles:
+
+```bash
+security add-generic-password -a "$USER" -s jego-typesafe -w     # prompts
+security add-generic-password -a "$USER" -s jego-text-model -w   # optional
+cp jego.local.env.example jego.local.env   # non-secret settings
+JEV_URL=... JEV_GOAL=... ./run-keychain.sh
+```
+
+### Text fields through a Codex subscription
+
+Set `TEXT_MODEL_PROVIDER=codex` and `CODEX_BIN` (absolute path; the ego
+runtime does not see your shell `PATH`). Each text field runs
+`codex exec --ignore-user-config` with `TEXT_MODEL` (default `gpt-6-luna`) and
+`TEXT_MODEL_REASONING` as the reasoning effort (default `low`). Expect about
+5 s per field, versus about 1 s for a direct API call.
 
 ## Guardrails
 
@@ -100,7 +125,7 @@ replace supervision.
 
 - **High-risk keyword gate (on by default)**: if an action's label or value
   matches payment, purchase, delete, send, transfer, authorize, or login
-  terms (English and Chinese), the run stops and reports the action instead
+  terms (English, Chinese, and Korean), the run stops and reports the action instead
   of executing it. It is a denylist: a cleverly worded button can get past
   it, and link URLs are not inspected. `JEV_AUTO=1` turns it off.
 - **Cross-domain stop**: after any action, if the page's hostname is no
@@ -136,9 +161,12 @@ page ──> snapshot.js ──> indexed action table ──> TypeSafe (1 reques
                               observe, repeat
 ```
 
-- `snapshot.js` is taken verbatim from upstream. It assigns stable IDs to
-  real DOM nodes via a `WeakMap`, collects visible controls and page text,
-  and produces a page marker used for staleness checks.
+- `snapshot.js` comes from upstream with one change: when the window itself
+  does not scroll, it offers scrolling for the largest inner scroll pane
+  (common in app shells that pin the window). It assigns stable IDs to real
+  DOM nodes via a `WeakMap`, collects visible controls and page text, and
+  produces a page marker used for staleness checks. A copy is inlined in
+  `jego.js` as `READ_STATE`; keep the two identical.
 - `jego.js` ports the upstream model layer (typed-choice validation,
   probability checks), the executor (geometry + hit-test + `Input.*` CDP
   events), and the agent loop (single-use decisions, history-before-observe,
@@ -151,7 +179,9 @@ page ──> snapshot.js ──> indexed action table ──> TypeSafe (1 reques
 Two settle tweaks were added for a foreground browser: a 300 ms observation
 cap after clicks (menu close animations are slower than in the upstream
 background-tab setup), and one re-observation when a click leaves fewer than
-six actions on the table (a sign of a mid-animation overlay).
+six actions on the table (a sign of a mid-animation overlay). A BLOCKED
+decision on a page that has rendered no controls yet (app boot, viewer load)
+is retried after a short wait, up to five times.
 
 ## Limits
 
@@ -182,7 +212,8 @@ Reproduce with `bench.sh` (env vars: `ZAI_API_KEY`, `DASHSCOPE_API_KEY`,
 
 MIT, see [LICENSE](LICENSE). Jego is a port of
 [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast)
-(MIT, copyright Browser Use); `snapshot.js` is copied verbatim and the
+(MIT, copyright Browser Use); `snapshot.js` is copied with the inner-pane
+scroll change described above, and the
 upstream license text is reproduced in the THIRD-PARTY NOTICES section.
 Ego Lite is an MIT project by CitroLabs; Jego only calls its public CLI and
 contains none of its code. Jego is an unofficial project, not affiliated

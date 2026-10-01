@@ -4,7 +4,8 @@
 # Usage:
 #   JEV_URL=https://news.ycombinator.com JEV_GOAL="Open the top story comments" ./run.sh
 # Optional: TYPESAFE_MODEL, TEXT_MODEL_API_KEY, TEXT_MODEL_BASE_URL, TEXT_MODEL,
-#           TEXT_MODEL_REASONING (none|omit)
+#           TEXT_MODEL_REASONING (none|omit), TEXT_MODEL_PROVIDER=codex + CODEX_BIN,
+#           JEV_FOLLOW_POPUPS=1. See run-keychain.sh for Keychain-held keys.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -13,7 +14,8 @@ cd "$(dirname "$0")"
 header=$(python3 -c '
 import json, os
 keys = ["JEV_URL","JEV_GOAL","TYPESAFE_API_KEY","TYPESAFE_MODEL",
-        "TEXT_MODEL_API_KEY","TEXT_MODEL_BASE_URL","TEXT_MODEL","TEXT_MODEL_REASONING","DEBUG","JEV_KEEP","JEV_AUTO","JEV_SPACE"]
+        "TEXT_MODEL_API_KEY","TEXT_MODEL_BASE_URL","TEXT_MODEL","TEXT_MODEL_REASONING","DEBUG","JEV_KEEP","JEV_AUTO","JEV_SPACE",
+        "TEXT_MODEL_PROVIDER","CODEX_BIN","JEV_FOLLOW_POPUPS"]
 print("globalThis.JEV_ENV = " + json.dumps({k: os.environ[k] for k in keys if k in os.environ}) + ";")
 ')
 

@@ -31,7 +31,7 @@
 | 文件 | 说明 |
 |---|---|
 | `jego.js` | 全部逻辑：model / driver / agent loop / CLI（snapshot.js 已内联） |
-| `snapshot.js` | 上游 DOM 快照脚本，**逐字未改**（改它后要重新内联进 jego.js） |
+| `snapshot.js` | 上游 DOM 快照脚本，仅增加内部滚动区域支持（改它后要重新内联进 jego.js） |
 | `run.sh` | 启动包装：把配置/密钥以 `JEV_ENV` 头注入 stdin（ego nodejs 不继承 shell 环境） |
 | `bench.sh` / `bench/` | 多模型测评脚本与报告 |
 
@@ -67,7 +67,7 @@ JEV_GOAL="Search Wikipedia for 'Gödel, Escher, Bach' and open the article about
 这些护栏是**缓解措施，不是保证**；它们缩小风险面，但不能替代人的监督。
 
 1. **高危动作关键词闸（默认阻断）**：动作 label/value 命中支付/购买/删除/发送/
-   转账/授权/登录类关键词（中英文）时，run 直接 blocked 并打印动作详情。
+   转账/授权/登录类关键词（中英韩文）时，run 直接 blocked 并打印动作详情。
    注意：这是关键词拒绝表，措辞新颖的高危按钮可能绕过；快照不含 href，
    链接目标地址不在检查范围内。显式 `JEV_AUTO=1` 可放行。
 2. **跨域即停**：动作后页面主机名不是起始主机或其子域 → blocked。
@@ -134,7 +134,7 @@ Ego 适配中新增的两处 settle 逻辑（上游没有的）：
 
 MIT（见 `LICENSE`）。本项目是
 [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast) 的移植，
-`snapshot.js` 逐字来自上游，上游完整 MIT 许可文本已附在 `LICENSE` 的
+`snapshot.js` 来自上游（仅增加内部滚动区域支持），上游完整 MIT 许可文本已附在 `LICENSE` 的
 THIRD-PARTY NOTICES 一节。Ego Lite 为
 [CitroLabs 的 MIT 项目](https://github.com/citrolabs/ego-lite)，本项目仅通过
 其公开 CLI 调用，不包含其代码。TypeSafe (Jev) 为托管服务，需自备账号与 Key。

@@ -241,32 +241,75 @@ function fieldContext(goal, action, page, history) {
   };
 }
 
-async function fieldText(context) {
-  const key = env("TEXT_MODEL_API_KEY");
-  if (!key)
-    throw new Error("TYPE_TEXT needs TEXT_MODEL_API_KEY; no text is hardcoded or guessed by the executor.");
-  const base = env("TEXT_MODEL_BASE_URL", "https://api.deepseek.com/v1").replace(/\/+$/, "");
-  if (!base.startsWith("https://"))
-    throw new Error("TEXT_MODEL_BASE_URL must be https; refusing to send the API key in cleartext.");
-  const model = env("TEXT_MODEL", "deepseek-chat");
-  let reasoning = base.includes("api.deepseek.com/")
-    ? { thinking: { type: "disabled" } }
-    : { reasoning: { effort: "low" } };
-  if (env("TEXT_MODEL_REASONING") === "none") reasoning = { reasoning: { enabled: false } };
-  if (env("TEXT_MODEL_REASONING") === "omit") reasoning = {};
-  const started = performance.now();
-  const result = await postJson(base + "/chat/completions", key, {
-    model,
-    max_tokens: 1024,
-    response_format: { type: "json_object" },
-    ...reasoning,
-    messages: [
-      { role: "system", content: TEXT_VALUE },
-      { role: "user", content: JSON.stringify(context) },
-    ],
-  });
+// TEXT_MODEL_PROVIDER=codex: generate the field value with `codex exec` on the
+// user's Codex sign-in instead of an API key. User config is ignored so MCP
+// servers and rules do not load (about 5 s per call instead of 17 s).
+async function codexText(context, model) {
+  const bin = env("CODEX_BIN");
+  if (!bin) throw new Error("TEXT_MODEL_PROVIDER=codex needs CODEX_BIN (absolute path to codex).");
+  const { spawn } = await import("node:child_process");
+  const { mkdtemp, readFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join, dirname } = await import("node:path");
+  const dir = await mkdtemp(join(tmpdir(), "jego-codex-"));
+  const out = join(dir, "last.txt");
   try {
-    const output = JSON.parse(result.choices[0].message.content);
+    const args = ["exec", "-m", model, "-c", `model_reasoning_effort=${env("TEXT_MODEL_REASONING", "low")}`,
+      "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check", "--ephemeral",
+      "-s", "read-only", "-o", out, "-"];
+    const code = await new Promise((resolve, reject) => {
+      // codex is a node script; the ego runtime PATH lacks the node it needs.
+      const child = spawn(bin, args, {
+        cwd: dir,
+        stdio: ["pipe", "ignore", "ignore"],
+        env: { ...process.env, PATH: `${dirname(bin)}:${process.env.PATH ?? ""}` },
+      });
+      const timer = setTimeout(() => child.kill("SIGKILL"), 60000);
+      child.on("error", reject);
+      child.on("close", (c) => (clearTimeout(timer), resolve(c)));
+      child.stdin.end(`${TEXT_VALUE}\n\nReply with the JSON object only.\n\n${JSON.stringify(context)}`);
+    });
+    if (code !== 0) throw new Error(`codex exec exited with ${code}; nothing typed.`);
+    return (await readFile(out, "utf8")).trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function fieldText(context) {
+  const started = performance.now();
+  let model, content, usage = {};
+  if (env("TEXT_MODEL_PROVIDER") === "codex") {
+    model = env("TEXT_MODEL", "gpt-6-luna");
+    content = await codexText(context, model);
+  } else {
+    const key = env("TEXT_MODEL_API_KEY");
+    if (!key)
+      throw new Error("TYPE_TEXT needs TEXT_MODEL_API_KEY; no text is hardcoded or guessed by the executor.");
+    const base = env("TEXT_MODEL_BASE_URL", "https://api.deepseek.com/v1").replace(/\/+$/, "");
+    if (!base.startsWith("https://"))
+      throw new Error("TEXT_MODEL_BASE_URL must be https; refusing to send the API key in cleartext.");
+    model = env("TEXT_MODEL", "deepseek-chat");
+    let reasoning = base.includes("api.deepseek.com/")
+      ? { thinking: { type: "disabled" } }
+      : { reasoning: { effort: "low" } };
+    if (env("TEXT_MODEL_REASONING") === "none") reasoning = { reasoning: { enabled: false } };
+    if (env("TEXT_MODEL_REASONING") === "omit") reasoning = {};
+    const result = await postJson(base + "/chat/completions", key, {
+      model,
+      max_tokens: 1024,
+      response_format: { type: "json_object" },
+      ...reasoning,
+      messages: [
+        { role: "system", content: TEXT_VALUE },
+        { role: "user", content: JSON.stringify(context) },
+      ],
+    });
+    content = result.choices?.[0]?.message?.content;
+    usage = result.usage ?? {};
+  }
+  try {
+    const output = JSON.parse(content);
     const value = output.text;
     if (
       Object.keys(output).length !== 1 ||
@@ -277,7 +320,7 @@ async function fieldText(context) {
       throw new Error();
     return {
       value,
-      helper: { model, latency_ms: Math.round(performance.now() - started), usage: result.usage ?? {} },
+      helper: { model, latency_ms: Math.round(performance.now() - started), usage },
     };
   } catch {
     throw new Error("Text helper returned no valid field value; nothing typed.");
@@ -288,7 +331,7 @@ async function fieldText(context) {
 // browser driver over the ego-browser SDK (port of browser.py)
 // ---------------------------------------------------------------------------
 
-const READ_STATE = "(() => {\n  if (!document.body) return null;\n  const cache = window.__jevFast ||= {ids:new WeakMap(), nodes:new Map(), next:1};\n  const identity = e => {\n    if (!cache.ids.has(e)) cache.ids.set(e,cache.next++);\n    const id=cache.ids.get(e); cache.nodes.set(id,e); return id;\n  };\n  for (const [id,e] of cache.nodes) if (!e.isConnected) cache.nodes.delete(id);\n  const safe = e => !['password','file','hidden'].includes(e.type);\n  const visible = e => !e.closest('[aria-hidden=\"true\"],[inert]') &&\n    e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true});\n  const name = (e,seen=new Set()) => {\n    if (!e || seen.has(e)) return '';\n    seen.add(e);\n    const referenced=(e.getAttribute('aria-labelledby')||'').split(/\\s+/)\n      .map(id=>name(document.getElementById(id),seen)).filter(Boolean).join(' ');\n    return referenced || e.getAttribute('aria-label') ||\n      [...(e.labels||[])].map(l=>name(l,seen)).filter(Boolean).join(' ') ||\n      (['button','submit','reset'].includes(e.type) ? e.value : '') || e.getAttribute('alt') ||\n      (e.tagName==='INPUT' ? '' : [...e.childNodes].map(n=>n.nodeType===3 ? n.textContent :\n        n.nodeType===1 && n.getAttribute('aria-hidden')!=='true' ? name(n,seen) : '').join(' ').trim()) ||\n      e.getAttribute('title') || e.getAttribute('placeholder') || '';\n  };\n  const roles=['button','link','checkbox','radio','switch','tab','menuitem','menuitemradio',\n    'option','gridcell','combobox','textbox','searchbox','spinbutton'];\n  const selector='a[href],button,input,textarea,select,summary,[contenteditable=\"true\"],'+\n    roles.map(role=>'[role=\"'+role+'\"]').join(',');\n  const role = e => {\n    const explicit=e.getAttribute('role');\n    if (roles.includes(explicit)) return explicit;\n    if (e.tagName==='BUTTON' || e.tagName==='SUMMARY') return 'button';\n    if (e.tagName==='A') return 'link';\n    if (e.tagName==='SELECT') return 'combobox';\n    if (e.tagName==='TEXTAREA' || e.isContentEditable) return 'textbox';\n    if (e.tagName==='INPUT') {\n      if (['checkbox','radio'].includes(e.type)) return e.type;\n      if (['button','submit','reset','image'].includes(e.type)) return 'button';\n      if (e.type==='search') return 'searchbox';\n      if (e.type==='number') return 'spinbutton';\n      if (['text','email','url','tel'].includes(e.type)) return 'textbox';\n    }\n    return null;\n  };\n  cache.pageKey=()=>[performance.timeOrigin,location.href,scrollX,scrollY,innerWidth,innerHeight,\n    [...document.querySelectorAll('input,textarea,select')].filter(safe)\n      .map(e=>[identity(e),e.value,e.checked,e.selectedIndex,e.disabled,e.readOnly])];\n  cache.guard=e=>{\n    if (!e?.isConnected || !visible(e)) return null;\n    const scope=e.closest('form,dialog,[role=\"dialog\"],article,li,tr,[role=\"row\"]') || e.parentElement;\n    return [identity(e),role(e),name(e),e.value??null,e.checked??null,e.selectedIndex??null,\n      e.readOnly??null,e.matches(':disabled'),e.getAttribute('aria-disabled'),\n      e.getAttribute('aria-expanded'),e.getAttribute('aria-checked'),e.getAttribute('aria-selected'),\n      e.getAttribute('href'),scope?.innerText?.slice(0,6000)||''];\n  };\n  const actions=[];\n  for (const e of document.querySelectorAll(selector)) {\n    if (!safe(e) || !visible(e) || e.matches(':disabled') || e.closest('[aria-disabled=\"true\"]')) continue;\n    const r=e.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2, rname=role(e);\n    if (!rname || r.width<=0 || r.height<=0 || x<0 || y<0 || x>=innerWidth || y>=innerHeight) continue;\n    if (rname==='gridcell' && e.querySelector('button,[role=\"button\"]')) continue;\n    const base={node:identity(e),role:rname,label:name(e)||rname,\n      rect:{x:r.x,y:r.y,w:r.width,h:r.height}};\n    for (const key of ['checked','selected','expanded']) {\n      const value=e.getAttribute('aria-'+key);\n      if (value!==null) base[key]=value;\n    }\n    if (['checkbox','radio'].includes(e.type)) base.checked=String(e.checked);\n    if (e.tagName==='SELECT') {\n      for (const o of e.options) if (!o.selected && !o.disabled && !o.closest('optgroup[disabled]'))\n        actions.push({...base,kind:'select',value:o.value,\n          current_value:[...e.selectedOptions].map(o=>o.label).join(', '),label:base.label+' \u2192 '+o.label});\n    } else {\n      const editable=!e.readOnly && e.getAttribute('aria-readonly')!=='true' &&\n        (['textbox','searchbox','spinbutton'].includes(rname) ||\n          (rname==='combobox' && ['INPUT','TEXTAREA'].includes(e.tagName)));\n      const value='value' in e ? String(e.value) :\n        e.isContentEditable || rname==='combobox' ? e.innerText.trim() : '';\n      actions.push({...base,kind:editable?'fill':'click',value});\n      if (editable) actions.push({...base,kind:'click',value,label:'Open '+base.label});\n    }\n  }\n  const words=[], walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);\n  const range=document.createRange(); let node,length=0;\n  while ((node=walker.nextNode()) && length<6000) {\n    const value=node.textContent.trim(), parent=node.parentElement;\n    if (!value || !parent || parent.closest('script,style,noscript,template') || !visible(parent)) continue;\n    range.selectNodeContents(node); const r=range.getBoundingClientRect();\n    if (r.width>0 && r.height>0 && r.bottom>0 && r.top<innerHeight && r.right>0 && r.left<innerWidth) {\n      words.push(value); length+=value.length;\n    }\n  }\n  const text=words.join('\\n').slice(0,6000), height=document.documentElement.scrollHeight;\n  const page_key=cache.pageKey(), guards={};\n  for (const a of actions) if (!(a.node in guards)) guards[a.node]=cache.guard(cache.nodes.get(a.node));\n  // Compare meaning and identity. Geometry is always resolved and hit-tested just before input.\n  const semantics=actions.map(({rect,...action})=>action);\n  const marker=[performance.timeOrigin,location.href,scrollX,scrollY,innerWidth,innerHeight,\n    document.title,text,semantics,page_key[6]];\n  const omitted_actions=Math.max(0,actions.length-250);\n  actions.splice(250);\n  actions.forEach((a,i)=>a.id='e'+(i+1));\n  if (scrollY+innerHeight<height-2) actions.push({id:'scroll_down',kind:'scroll',label:'Scroll down',delta:560});\n  if (scrollY>0) actions.push({id:'scroll_up',kind:'scroll',label:'Scroll up',delta:-560});\n  actions.push({id:'wait',kind:'wait',label:'Wait for the page to update'});\n  return {url:location.href,title:document.title,w:innerWidth,h:innerHeight,text,\n    scroll:{y:scrollY,height},actions,marker,page_key,guards,omitted_actions};\n})()\n";
+const READ_STATE = "(() => {\n  if (!document.body) return null;\n  const cache = window.__jevFast ||= {ids:new WeakMap(), nodes:new Map(), next:1};\n  const identity = e => {\n    if (!cache.ids.has(e)) cache.ids.set(e,cache.next++);\n    const id=cache.ids.get(e); cache.nodes.set(id,e); return id;\n  };\n  for (const [id,e] of cache.nodes) if (!e.isConnected) cache.nodes.delete(id);\n  const safe = e => !['password','file','hidden'].includes(e.type);\n  const visible = e => !e.closest('[aria-hidden=\"true\"],[inert]') &&\n    e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true});\n  const name = (e,seen=new Set()) => {\n    if (!e || seen.has(e)) return '';\n    seen.add(e);\n    const referenced=(e.getAttribute('aria-labelledby')||'').split(/\\s+/)\n      .map(id=>name(document.getElementById(id),seen)).filter(Boolean).join(' ');\n    return referenced || e.getAttribute('aria-label') ||\n      [...(e.labels||[])].map(l=>name(l,seen)).filter(Boolean).join(' ') ||\n      (['button','submit','reset'].includes(e.type) ? e.value : '') || e.getAttribute('alt') ||\n      (e.tagName==='INPUT' ? '' : [...e.childNodes].map(n=>n.nodeType===3 ? n.textContent :\n        n.nodeType===1 && n.getAttribute('aria-hidden')!=='true' ? name(n,seen) : '').join(' ').trim()) ||\n      e.getAttribute('title') || e.getAttribute('placeholder') || '';\n  };\n  const roles=['button','link','checkbox','radio','switch','tab','menuitem','menuitemradio',\n    'option','gridcell','combobox','textbox','searchbox','spinbutton'];\n  const selector='a[href],button,input,textarea,select,summary,[contenteditable=\"true\"],'+\n    roles.map(role=>'[role=\"'+role+'\"]').join(',');\n  const role = e => {\n    const explicit=e.getAttribute('role');\n    if (roles.includes(explicit)) return explicit;\n    if (e.tagName==='BUTTON' || e.tagName==='SUMMARY') return 'button';\n    if (e.tagName==='A') return 'link';\n    if (e.tagName==='SELECT') return 'combobox';\n    if (e.tagName==='TEXTAREA' || e.isContentEditable) return 'textbox';\n    if (e.tagName==='INPUT') {\n      if (['checkbox','radio'].includes(e.type)) return e.type;\n      if (['button','submit','reset','image'].includes(e.type)) return 'button';\n      if (e.type==='search') return 'searchbox';\n      if (e.type==='number') return 'spinbutton';\n      if (['text','email','url','tel'].includes(e.type)) return 'textbox';\n    }\n    return null;\n  };\n  cache.pageKey=()=>[performance.timeOrigin,location.href,scrollX,scrollY,innerWidth,innerHeight,\n    [...document.querySelectorAll('input,textarea,select')].filter(safe)\n      .map(e=>[identity(e),e.value,e.checked,e.selectedIndex,e.disabled,e.readOnly])];\n  cache.guard=e=>{\n    if (!e?.isConnected || !visible(e)) return null;\n    const scope=e.closest('form,dialog,[role=\"dialog\"],article,li,tr,[role=\"row\"]') || e.parentElement;\n    return [identity(e),role(e),name(e),e.value??null,e.checked??null,e.selectedIndex??null,\n      e.readOnly??null,e.matches(':disabled'),e.getAttribute('aria-disabled'),\n      e.getAttribute('aria-expanded'),e.getAttribute('aria-checked'),e.getAttribute('aria-selected'),\n      e.getAttribute('href'),scope?.innerText?.slice(0,6000)||''];\n  };\n  const actions=[];\n  for (const e of document.querySelectorAll(selector)) {\n    if (!safe(e) || !visible(e) || e.matches(':disabled') || e.closest('[aria-disabled=\"true\"]')) continue;\n    const r=e.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2, rname=role(e);\n    if (!rname || r.width<=0 || r.height<=0 || x<0 || y<0 || x>=innerWidth || y>=innerHeight) continue;\n    if (rname==='gridcell' && e.querySelector('button,[role=\"button\"]')) continue;\n    const base={node:identity(e),role:rname,label:name(e)||rname,\n      rect:{x:r.x,y:r.y,w:r.width,h:r.height}};\n    for (const key of ['checked','selected','expanded']) {\n      const value=e.getAttribute('aria-'+key);\n      if (value!==null) base[key]=value;\n    }\n    if (['checkbox','radio'].includes(e.type)) base.checked=String(e.checked);\n    if (e.tagName==='SELECT') {\n      for (const o of e.options) if (!o.selected && !o.disabled && !o.closest('optgroup[disabled]'))\n        actions.push({...base,kind:'select',value:o.value,\n          current_value:[...e.selectedOptions].map(o=>o.label).join(', '),label:base.label+' \u2192 '+o.label});\n    } else {\n      const editable=!e.readOnly && e.getAttribute('aria-readonly')!=='true' &&\n        (['textbox','searchbox','spinbutton'].includes(rname) ||\n          (rname==='combobox' && ['INPUT','TEXTAREA'].includes(e.tagName)));\n      const value='value' in e ? String(e.value) :\n        e.isContentEditable || rname==='combobox' ? e.innerText.trim() : '';\n      actions.push({...base,kind:editable?'fill':'click',value});\n      if (editable) actions.push({...base,kind:'click',value,label:'Open '+base.label});\n    }\n  }\n  const words=[], walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);\n  const range=document.createRange(); let node,length=0;\n  while ((node=walker.nextNode()) && length<6000) {\n    const value=node.textContent.trim(), parent=node.parentElement;\n    if (!value || !parent || parent.closest('script,style,noscript,template') || !visible(parent)) continue;\n    range.selectNodeContents(node); const r=range.getBoundingClientRect();\n    if (r.width>0 && r.height>0 && r.bottom>0 && r.top<innerHeight && r.right>0 && r.left<innerWidth) {\n      words.push(value); length+=value.length;\n    }\n  }\n  const text=words.join('\\n').slice(0,6000), height=document.documentElement.scrollHeight;\n  const page_key=cache.pageKey(), guards={};\n  for (const a of actions) if (!(a.node in guards)) guards[a.node]=cache.guard(cache.nodes.get(a.node));\n  // Compare meaning and identity. Geometry is always resolved and hit-tested just before input.\n  const semantics=actions.map(({rect,...action})=>action);\n  const marker=[performance.timeOrigin,location.href,scrollX,scrollY,innerWidth,innerHeight,\n    document.title,text,semantics,page_key[6]];\n  const omitted_actions=Math.max(0,actions.length-250);\n  actions.splice(250);\n  actions.forEach((a,i)=>a.id='e'+(i+1));\n  // Apps that pin the window and scroll an inner pane: offer that pane's scroll instead.\n  const pane=height>innerHeight+2 ? null : [...document.querySelectorAll('body *')]\n    .filter(e=>e.scrollHeight>e.clientHeight+2 && e.clientHeight>innerHeight/3 && /auto|scroll/.test(getComputedStyle(e).overflowY))\n    .sort((a,b)=>b.clientWidth*b.clientHeight-a.clientWidth*a.clientHeight)[0];\n  const pr=pane?.getBoundingClientRect(), sy=pane?pane.scrollTop:scrollY;\n  const wheel=pr ? {x:Math.round(Math.min(Math.max(pr.x+pr.width/2,1),innerWidth-1)),\n    y:Math.round(Math.min(Math.max(pr.y+pr.height/2,1),innerHeight-1))} : {};\n  if (pane ? sy+pane.clientHeight<pane.scrollHeight-2 : scrollY+innerHeight<height-2)\n    actions.push({id:'scroll_down',kind:'scroll',label:'Scroll down',delta:560,...wheel});\n  if (sy>0) actions.push({id:'scroll_up',kind:'scroll',label:'Scroll up',delta:-560,...wheel});\n  actions.push({id:'wait',kind:'wait',label:'Wait for the page to update'});\n  return {url:location.href,title:document.title,w:innerWidth,h:innerHeight,text,\n    scroll:{y:scrollY,height},actions,marker,page_key,guards,omitted_actions};\n})()\n";
 const MARKER = `(() => { const state=${READ_STATE}; return state?.marker ?? null; })()`;
 
 class StalePage extends Error {}
@@ -333,6 +376,32 @@ class EgoDriver {
       // slow pages still settle via the observe() retry loop
     }
     this.afterInput = null;
+  }
+
+  // A click that calls window.open lands in a new managed page while the agent
+  // keeps observing the old one. Switch to the newest page this space opened.
+  async followPopup() {
+    let newest = null;
+    for (let i = 0; i < 5 && !newest; i++) {
+      const pages = await this.task.pages();
+      const last = pages[pages.length - 1];
+      if (last && last.label !== this.page.label) newest = last;
+      else await sleep(150);
+    }
+    if (!newest) return false;
+    this.page = newest;
+    try {
+      await this.page.cdp("Page.setDownloadBehavior", { behavior: "deny" });
+    } catch {
+      // older targets may not support it
+    }
+    try {
+      await this.page.waitForLoadState("load", { timeout: 15000 });
+    } catch {
+      // slow pages still settle via the observe() retry loop
+    }
+    this.afterInput = null;
+    return true;
   }
 
   async evaluate(expression, { fatal = false } = {}) {
@@ -424,8 +493,8 @@ class EgoDriver {
     } else if (kind === "scroll") {
       await this.page.cdp("Input.dispatchMouseEvent", {
         type: "mouseWheel",
-        x: 550,
-        y: 650,
+        x: action.x ?? 550,
+        y: action.y ?? 650,
         deltaX: 0,
         deltaY: action.delta,
       });
@@ -501,7 +570,7 @@ class EgoDriver {
 // High-risk action gate (fail-closed): labels/links that imply money, deletion,
 // messaging, or authorization stop the run unless JEV_AUTO=1 is set explicitly.
 const RISKY =
-  /\b(pay|payment|purchase|buy|check ?out|place order|booking|delete|remove|send|share|transfer|subscribe|authorize|grant|log ?in|sign ?in)\b|支付|付款|购买|下单|删除|移除|发送|分享|转账|订阅|授权|登录/i;
+  /\b(pay|payment|purchase|buy|check ?out|place order|booking|delete|remove|send|share|transfer|subscribe|authorize|grant|log ?in|sign ?in)\b|支付|付款|购买|下单|删除|移除|发送|分享|转账|订阅|授权|登录|결제|구매|주문하기|삭제|제거|전송|보내기|공유|송금|이체|구독|로그인/i;
 // Single-word CTA buttons ("Book", "Buy", "Pay") are risky only as exact labels,
 // so autocomplete text like "1979 book by ..." does not false-positive.
 const RISKY_EXACT = /^(book|buy|pay|send|delete|place order|confirm|subscribe|transfer)[.!]?$/i;
@@ -518,6 +587,7 @@ class Agent {
     if (!task) throw new Error("Supply a task");
     const agent = new Agent();
     agent.pendingText = null;
+    agent.emptyBlocks = 0;
     agent.browser = new EgoDriver();
     await agent.browser.open(url);
     let page;
@@ -576,7 +646,7 @@ class Agent {
     if (env("DEBUG"))
       console.error(
         `debug predict: ${state.decision.operation} choice=${state.decision.choice} ` +
-          `conf=${state.decision.confidence} url=${state.page.url} title=${JSON.stringify(state.page.title)} ` +
+          `conf=${state.decision.confidence} url=${redactUrl(state.page.url)} title=${JSON.stringify(state.page.title)} ` +
           `actions=${state.page.actions.length} omitted=${state.page.omitted_actions} vp=${state.page.w}x${state.page.h}`
       );
     if (env("DEBUG") && state.page.actions.length < 10)
@@ -603,6 +673,16 @@ class Agent {
     // Consume once, before any mutation or model call. A retry cannot double-click.
     state.decision = null;
     const selected = decision.choice;
+    // A page with no controls yet (SPA boot, viewer load) is not a dead end:
+    // re-observe a few times before accepting BLOCKED.
+    if (selected === "BLOCKED" && !page.actions.some((a) => Number.isInteger(a.node)) && this.emptyBlocks < 5) {
+      this.emptyBlocks += 1;
+      await sleep(500);
+      state.page = await this.browser.observe();
+      state.status = "ready";
+      state.elapsed_ms = Math.round(performance.now() - state.started_at);
+      return this.snapshot();
+    }
     if (selected === "DONE" || selected === "BLOCKED") {
       if (!(await this.browser.fresh(page))) {
         state.status = "ready";
@@ -667,6 +747,7 @@ class Agent {
       executed_ms: Math.round(performance.now() - state.started_at),
       elapsed_ms: state.elapsed_ms,
     });
+    if (action.kind === "click" && env("JEV_FOLLOW_POPUPS") === "1") await this.browser.followPopup();
     state.page = await this.browser.observe();
     // Transient overlays (closing menus, flyout animations) can shrink the
     // observed action table to a handful of entries; re-observe once after a
@@ -723,6 +804,18 @@ class Agent {
 // CLI
 // ---------------------------------------------------------------------------
 
+// SSO hand-offs put session tokens in the query string; keep them out of stdout.
+const SECRET_PARAM = /token|key|secret|session|auth|code|password|access_id|user_id/i;
+function redactUrl(raw) {
+  try {
+    const u = new URL(raw);
+    for (const k of [...u.searchParams.keys()]) if (SECRET_PARAM.test(k)) u.searchParams.set(k, "REDACTED");
+    return u.toString();
+  } catch {
+    return raw;
+  }
+}
+
 function parseArgs(argv) {
   const args = {};
   for (let i = 0; i < argv.length; i++) {
@@ -769,7 +862,7 @@ try {
       {
         status: state.status,
         elapsed_ms: state.elapsed_ms,
-        final_url: state.page.url,
+        final_url: redactUrl(state.page.url),
         steps: state.history.length,
         text_calls: state.text_calls.length,
         block_reason: state.block_reason ?? null,

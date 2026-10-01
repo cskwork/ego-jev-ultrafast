@@ -99,8 +99,16 @@
   const omitted_actions=Math.max(0,actions.length-250);
   actions.splice(250);
   actions.forEach((a,i)=>a.id='e'+(i+1));
-  if (scrollY+innerHeight<height-2) actions.push({id:'scroll_down',kind:'scroll',label:'Scroll down',delta:560});
-  if (scrollY>0) actions.push({id:'scroll_up',kind:'scroll',label:'Scroll up',delta:-560});
+  // Apps that pin the window and scroll an inner pane: offer that pane's scroll instead.
+  const pane=height>innerHeight+2 ? null : [...document.querySelectorAll('body *')]
+    .filter(e=>e.scrollHeight>e.clientHeight+2 && e.clientHeight>innerHeight/3 && /auto|scroll/.test(getComputedStyle(e).overflowY))
+    .sort((a,b)=>b.clientWidth*b.clientHeight-a.clientWidth*a.clientHeight)[0];
+  const pr=pane?.getBoundingClientRect(), sy=pane?pane.scrollTop:scrollY;
+  const wheel=pr ? {x:Math.round(Math.min(Math.max(pr.x+pr.width/2,1),innerWidth-1)),
+    y:Math.round(Math.min(Math.max(pr.y+pr.height/2,1),innerHeight-1))} : {};
+  if (pane ? sy+pane.clientHeight<pane.scrollHeight-2 : scrollY+innerHeight<height-2)
+    actions.push({id:'scroll_down',kind:'scroll',label:'Scroll down',delta:560,...wheel});
+  if (sy>0) actions.push({id:'scroll_up',kind:'scroll',label:'Scroll up',delta:-560,...wheel});
   actions.push({id:'wait',kind:'wait',label:'Wait for the page to update'});
   return {url:location.href,title:document.title,w:innerWidth,h:innerHeight,text,
     scroll:{y:scrollY,height},actions,marker,page_key,guards,omitted_actions};
